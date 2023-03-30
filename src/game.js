@@ -91,6 +91,10 @@ class GameMap {
 		return (y * this.width) + x
 	}
 
+    getTile(x,y) {
+        return this.tiles[this.getIndexFromXY(x,y)]
+    }
+
 	inBounds(x,y) {
 		const idx = this.getIndexFromXY(x,y);
 		return idx < this.tiles.length;
@@ -107,14 +111,14 @@ class GameMap {
 	}
 
 	createHorizontalTunnel(x1, x2, y) {
-		for (let x = Math.min(x1, x2); x < Math.max(x1,x2); x++) {
+		for (let x = Math.min(x1, x2); x < Math.max(x1,x2) +1; x++) {
 			if (this.inBounds(x,y))
 				this.tiles[this.getIndexFromXY(x,y)].convertToFloor()
 		}
 	}
 
 	createVerticalTunnel(y1, y2, x) {
-		for (let y = (Math.min(y1, y2)+1); y<Math.max(y1,y2); y++) {
+		for (let y = Math.min(y1, y2); y<Math.max(y1,y2)+1; y++) {
 			if (this.inBounds(x,y))
 				this.tiles[this.getIndexFromXY(x,y)].convertToFloor()
 		}
@@ -167,13 +171,99 @@ class GameMap {
 	}
 }
 
-class Actor {
+class Component {}
 
-	constructor(x,y) {
-		this.x = x;
-		this.y = y;
+class System {
+    constructor() {
+        this.entities = [];
+        this.ecs = false;
+    }
+	update(entities) {}
+    add(e) { this.entities.push(e) }
+    remove(en) {
+        this.entities = this.entities.filter(e => (e != en));
+    }
+}
+
+class ComponentContainer {
+
+	map = {};
+
+	add(c) {
+
+        this.map[c.constructor.name] = c;
+    }
+	has(c) { return c in map }
+	has_all(comps) {
+        const p = comps.every( c => (this.map[c] !== undefined));
+        return p;
+    }
+	get(c) { return this.map[c] }
+	remove(c) { delete this.map[c] }
+
+}
+
+class ECS {
+	systems = [];
+	entities_to_destroy = [];
+    constructor() {
+        this.entities = {};
+    }
+	add_entity() {
+		const e = Object.keys(this.entities).length;
+		this.entities[e] = new ComponentContainer();
+		return e
 	}
 
+	remove_entity(e) { delete this.entities[e] }
+    get_components(e) { return this.entities[e] }
+    add_component(e, c) {
+        this.entities[e].add(c);
+        this.checkE(e);
+    }
+
+    remove_component(e, c) {
+       this.entities[e].remove(c);
+       this.checkE(e);
+    }
+
+	add_system(s) {
+        s.ecs = this;
+		this.systems.push(s);
+		Object.keys(this.entities).forEach( e => this.checkES(e, s) )
+	}
+
+	remove_system(sys) {
+        this.systems = this.systems.filter(s => (s != sys))
+    }
+
+	update() {
+		this.systems.forEach(s => s.update());
+		this.entities_to_destroy.forEach(e => this.destroy_entity(e));
+	}
+
+	destroy_entity(e) {
+		this.systems.forEach(s => s.remove_entity(e));
+		this.remove_entity(e);
+	}
+
+	checkE(e) {
+		this.systems.forEach(s => this.checkES(e,s))
+	}
+
+	checkES(e,s) {
+		const ec = this.entities[e];
+		ec.has_all(s.components_required) ? s.add(e) : s.remove(e);
+	}
+}
+
+class Position extends Component {
+	constructor(x=0,y=0,m) {
+		super(x,y);
+		this.x = x;
+		this.y = y;
+        this.map = m;
+	}
 	move(dx,dy) {
 		this.x += dx;
 		this.y += dy;
@@ -181,48 +271,117 @@ class Actor {
 
 }
 
-class Game {
+class PlayerActionSystem extends System {
+    constructor(map) {
+        super();
+        this.map = map;
+    }
 
-	constructor() {
-		const map = new GameMap();
+
+}
+class RenderingSystem extends System {
+	components_required = ['Actor', 'Position'];
+
+    constructor(ctx, tile_size) {
+        super();
+        this.ctx = ctx;
+        this.tile_size = tile_size;
+    }
+
+	update() {
+        const { ecs, ctx, entities, tile_size } = this;
+		entities.forEach(e => {
+            const pos = ecs.get_components(e).get('Position');
+            const a = ecs.get_components(e).get('Actor');
+                ctx.fillText(
+                    a.char,
+                    pos.x*this.tile_size,
+                    pos.y*this.tile_size,
+                )
+		});
+	}
+}
+
+class Actor extends Component {
+	constructor(o) {
+        super()
+		Object.assign(this,o);
+	}
+}
+
+class Game {
+	ecs = new ECS();
+
+	#initCanvas() {
 		const canvas = document.querySelector('#game');
 		const ctx = canvas.getContext("2d");
+		const map = this.map;
 
 		canvas.width = map.tileSize * map.width;
 		canvas.height = map.tileSize * map.height;
 		canvas.style.width = canvas.width + 'px' ;
 		canvas.style.height = canvas.height + 'px';
 
-		ctx.font = map.tileSize + 'pt monospace';
+		ctx.font = map.tileSize + 'px monospace';
 
-		this.player = new Actor(
-			map.rooms[0].center().x,
-			map.rooms[0].center().y
-		);
-
-		this.map = map;
 		this.ctx = ctx;
 		this.canvas = canvas;
+	}
 
+	#initPlayer() {
+		this.player = this.ecs.add_entity();
+		this.ecs.add_component(this.player, new Actor({
+			char: '@'
+		}));
+		this.ecs.add_component(this.player, new Position(
+			this.map.rooms[0].center().x,
+			this.map.rooms[0].center().y,
+            this.map,
+		));
+	}
+
+	#initMap () {
+		this.map = new GameMap();
+	}
+
+	constructor() {
+		this.#initMap(); // must come before init canvas
+		this.#initCanvas()
+
+        this.ecs.add_system(new RenderingSystem(this.ctx, this.map.tileSize));
+		this.#initPlayer();
 	}
 
 	handleInput(e) {
-		if (e.key == "h") this.player.move(-1,0);
-		if (e.key == "j") this.player.move(0,1);
-		if (e.key == "k") this.player.move(0,-1);
-		if (e.key == "l") this.player.move(1,0);
+        const move_player = (dx,dy) => {
+            const pos = this.ecs.get_components(this.player)
+                     .get('Position');
+
+            if(!this.map.inBounds(pos.x + dx, pos.y + dy)) return;
+
+            const tile  = this.map.getTile(pos.x + dx, pos.y + dy);
+            if (tile.blocked) return;
+
+            pos.move(dx, dy);
+        }
+
+		if (e.key == "h") move_player(-1,0);
+		if (e.key == "j") move_player(0,1);
+		if (e.key == "k") move_player(0,-1);
+		if (e.key == "l") move_player(1,0);
+
 	}
 
 	draw() {
 		const { x, y, map, ctx, canvas } = this;
 		ctx.clearRect(0,0,canvas.width, canvas.height);
-		map.draw(ctx)
-		ctx.fillText(
-			'@',
-			this.player.x*map.tileSize,
-			this.player.y*map.tileSize,
-		);
+		map.draw(ctx);
 	}
+
+    run() {
+        this.draw();
+        this.ecs.update();
+    }
 }
 
 

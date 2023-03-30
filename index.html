@@ -20,12 +20,11 @@
         <canvas id="game"></canvas>
         <script src="src/game.js"></script>
         <script>
-
         const g = new Game();
         document.querySelector("html")
 		 		.onkeypress = (e) => g.handleInput(e);
 
-        setInterval(() =>  g.draw(), 15)
+        setInterval(() =>  g.run(), 15)
     </script>
     </body>
 </html>
