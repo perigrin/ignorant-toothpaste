@@ -12,6 +12,7 @@ class Tile {
 		this.y = y;
 		this.char = char;
 		this.blocked = blocked;
+        this.seen = false;
 	}
 
 	center() {
@@ -25,10 +26,6 @@ class Tile {
 		this.type = "floor";
 		this.char = ' ';
 		this.blocked = false;
-	}
-
-	draw(ctx) {
-		ctx.fillText(this.char, this.x, this.y)
 	}
 }
 
@@ -91,6 +88,11 @@ class GameMap {
 		return (y * this.width) + x
 	}
 
+    getIndexFromPoint(p) {
+        const {x,y} = p;
+        return this.getIndexFromXY(x,y);
+    }
+
     getTile(x,y) {
         return this.tiles[this.getIndexFromXY(x,y)]
     }
@@ -100,6 +102,12 @@ class GameMap {
 		return idx < this.tiles.length;
 	}
 
+    blockTile(p) {
+        this.tiles[this.getIndexFromPoint(p)].blocked = true;
+    }
+    unblockTile(p) {
+        this.tiles[this.getIndexFromPoint(p)].blocked = false;
+    }
 	addRoom(r) {
 		this.rooms.push(r);
 		for (let x = 0; x < r.w; x++) {
@@ -166,9 +174,7 @@ class GameMap {
 		}
 	}
 
-	draw(ctx) {
-		this.forEachTile((_,t) => t.draw(ctx))
-	}
+
 }
 
 class Component {}
@@ -186,13 +192,9 @@ class System {
 }
 
 class ComponentContainer {
-
 	map = {};
 
-	add(c) {
-
-        this.map[c.constructor.name] = c;
-    }
+	add(c) { this.map[c.constructor.name] = c }
 	has(c) { return c in this.map }
 	has_all(comps) {
         const p = comps.every( c => (this.map[c] !== undefined));
@@ -267,42 +269,71 @@ class Position extends Component {
 		this.x = x;
 		this.y = y;
         this.map = m;
+        m.blockTile(this);
 	}
 	move(dx,dy) {
+        this.map.unblockTile(this);
 		this.x += dx;
 		this.y += dy;
+        this.map.blockTile(this);;
 	}
 
 }
 
-class PlayerActionSystem extends System {
-    constructor(map) {
-        super();
-        this.map = map;
+class Viewshed extends Component {
+    visible_tiles = [];
+    dirty = true;
+    constructor(r=8) {
+        super(r);
+        this.range = r;
     }
 
-
+    visible(idx) {
+        return this.visible_tiles.find( i => (i === idx) )
+    }
 }
 
-class RenderingSystem extends System {
-	components_required = ['Actor', 'Position'];
+class VisibilitySystem extends System {
+	components_required = ['Position', 'Viewshed'];
 
-    constructor(ctx, tile_size) {
-        super();
-        this.ctx = ctx;
-        this.tile_size = tile_size;
+    constructor(m, p) {
+        super(m);
+        this.map = m;
+        this.player = p;
     }
 
 	update() {
-        const { ecs, ctx, entities, tile_size } = this;
+        const { ecs, entities, map } = this;
+
+        const fov = (p, r, m) => {
+            const indexes = [m.getIndexFromPoint(p)];
+            for (let x = p.x - r; x < p.x + r; x++) {
+                for (let y = p.y - r; y < p.y + r; y++) {
+                    if (!m.inBounds(x,y))
+                        continue;
+
+                    indexes.push(m.getIndexFromXY(x,y));
+                }
+            }
+            return indexes;
+        };
+
 		entities.forEach(e => {
             const pos = ecs.get_components(e).get('Position');
-            const a = ecs.get_components(e).get('Actor');
-                ctx.fillText(
-                    a.char,
-                    pos.x*this.tile_size,
-                    pos.y*this.tile_size,
-                )
+            const v = ecs.get_components(e).get('Viewshed');
+                // don't do anything if our viewshed hasn't changed
+               if (!v.dirty) return;
+
+                v.visible_tiles = [];
+                v.visible_tiles = fov({x: pos.x, y: pos.y}, v.range, this.map);
+
+                // update what the player can see
+                if (e == this.player) {
+                    v.visible_tiles.filter(i => map.tiles[i]).forEach(i => {
+                        map.tiles[i].seen = true
+                    });
+                    v.dirty = false;
+                }
 		});
 	}
 }
@@ -316,6 +347,7 @@ class Actor extends Component {
 
 class Game {
 	ecs = new ECS();
+    actions_pending = [];
 
 	#initCanvas() {
 		const canvas = document.querySelector('#game');
@@ -343,39 +375,73 @@ class Game {
 			this.map.rooms[0].center().y,
             this.map,
 		));
+        this.ecs.add_component(this.player, new Viewshed());
 	}
+
+    #initMonsters() {
+        this.map.rooms.filter((_, i) => i !== 0).forEach(r => {
+            const c = r.center();
+            const m = this.ecs.add_entity();
+            this.ecs.add_component(m, new Actor({ char: 'm' }));
+            this.ecs.add_component(m, new Position(c.x, c.y, this.map));
+            this.ecs.add_component(m, new Viewshed());
+        });
+    }
 
 	#initMap () {
 		this.map = new GameMap();
 	}
 
+    #initSystems() {
+        this.ecs.add_system(new VisibilitySystem(this.map, this.player));
+    }
+
+    #initKeymap() {
+        const move = (dx,dy) => new MovementAction(this, this.player, dx, dy);
+        this.keymap = {
+            "KeyH"      : move(-1,0),
+            'KeyJ'      : move(0,1),
+            'KeyK'      : move(0,-1),
+            'KeyL'      : move(1,0),
+            "ArrowLeft" : move(-1,0),
+            "ArrowRight": move(1,0),
+            'ArrowDown' : move(0,1),
+            'ArrowUp'   : move(0,-1)
+        };
+    }
+
 	constructor() {
-		this.#initMap(); // must come before init canvas
+		this.#initMap(); // TODO fix this so it's not order dependent
 		this.#initCanvas()
 		this.#initPlayer();
+        this.#initMonsters();
+        this.#initSystems();
+        this.#initKeymap();
 	}
 
 	handleInput(e) {
-        const move = new MovementAction(this);
-
-		if (e.key == "h") move.perform(this.player, -1,0);
-		if (e.key == "j") move.perform(this.player, 0,1);
-		if (e.key == "k") move.perform(this.player, 0,-1);
-		if (e.key == "l") move.perform(this.player, 1,0);
-
+        this.actions_pending.push(this.keymap[e.code] || new Action(this));
 	}
 
 	draw() {
-		const { x, y, map, ctx, canvas } = this;
-		ctx.clearRect(0,0,canvas.width, canvas.height);
-		map.draw(ctx);
+		const { ecs, map, ctx, canvas } = this;
+
+		ctx.clearRect(0,0,canvas.width,canvas.height);
+
+        const pv = ecs.get_components(this.player).get('Viewshed');
+
+        // draw the map
+        map.forEachTile((_,t) => {
+            if (t.seen) ctx.fillText(t.char, t.x, t.y)
+        })
 
         // for now all Actors are renderable
-        this.ecs.get_all_components('Actor')
+        ecs.get_all_components('Actor')
             .filter(c => c.has('Position'))
-            .forEach(c => {
-               const a = c.get('Actor');
-               const pos = c.get('Position');
+            .map(c => ({ a: c.get('Actor'), pos: c.get('Position')}) )
+            .filter(p => pv.visible(map.getIndexFromPoint(p.pos)))
+            .forEach(p => {
+               const {a, pos} = p;
                ctx.fillText(
                     a.char,
                     pos.x*map.tileSize,
@@ -385,20 +451,28 @@ class Game {
 	}
 
     update() {
+        let action = this.actions_pending.shift()
+        while (action) { action = action.perform() }
         this.ecs.update();
         this.draw();
     }
 }
 
-
 class Action {
     constructor(g) { this.game = g }
+    perform() { }
 }
 
 class MovementAction extends Action {
-    perform (entity, dx,dy) {
+    constructor(g, e, dx, dy) {
+        super(g);
+        this.entity = e;
+        this.dx = dx;
+        this.dy = dy;
+    }
+    perform () {
+        const {entity, dx, dy} = this;
         const { ecs, map } = this.game;
-
         const pos = ecs.get_components(entity).get('Position');
 
         if(!map.inBounds(pos.x+dx, pos.y+dy)) return;
@@ -407,5 +481,6 @@ class MovementAction extends Action {
         if (tile.blocked) return;
 
         pos.move(dx, dy);
+        ecs.get_components(entity).get('Viewshed').dirty = true;
     }
 }

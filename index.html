@@ -22,7 +22,7 @@
         <script>
         const g = new Game();
         document.querySelector("html")
-		 		.onkeypress = (e) => g.handleInput(e);
+		 		.onkeydown = (e) => g.handleInput(e);
         setInterval(() =>  g.update(), 15)
     </script>
     </body>
