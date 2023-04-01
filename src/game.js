@@ -193,7 +193,7 @@ class ComponentContainer {
 
         this.map[c.constructor.name] = c;
     }
-	has(c) { return c in map }
+	has(c) { return c in this.map }
 	has_all(comps) {
         const p = comps.every( c => (this.map[c] !== undefined));
         return p;
@@ -225,6 +225,10 @@ class ECS {
     remove_component(e, c) {
        this.entities[e].remove(c);
        this.checkE(e);
+    }
+
+    get_all_components(c) {
+        return Object.values(this.entities).filter(comp => comp.has(c));
     }
 
 	add_system(s) {
@@ -279,6 +283,7 @@ class PlayerActionSystem extends System {
 
 
 }
+
 class RenderingSystem extends System {
 	components_required = ['Actor', 'Position'];
 
@@ -347,28 +352,16 @@ class Game {
 	constructor() {
 		this.#initMap(); // must come before init canvas
 		this.#initCanvas()
-
-        this.ecs.add_system(new RenderingSystem(this.ctx, this.map.tileSize));
 		this.#initPlayer();
 	}
 
 	handleInput(e) {
-        const move_player = (dx,dy) => {
-            const pos = this.ecs.get_components(this.player)
-                     .get('Position');
+        const move = new MovementAction(this);
 
-            if(!this.map.inBounds(pos.x + dx, pos.y + dy)) return;
-
-            const tile  = this.map.getTile(pos.x + dx, pos.y + dy);
-            if (tile.blocked) return;
-
-            pos.move(dx, dy);
-        }
-
-		if (e.key == "h") move_player(-1,0);
-		if (e.key == "j") move_player(0,1);
-		if (e.key == "k") move_player(0,-1);
-		if (e.key == "l") move_player(1,0);
+		if (e.key == "h") move.perform(this.player, -1,0);
+		if (e.key == "j") move.perform(this.player, 0,1);
+		if (e.key == "k") move.perform(this.player, 0,-1);
+		if (e.key == "l") move.perform(this.player, 1,0);
 
 	}
 
@@ -376,13 +369,43 @@ class Game {
 		const { x, y, map, ctx, canvas } = this;
 		ctx.clearRect(0,0,canvas.width, canvas.height);
 		map.draw(ctx);
+
+        // for now all Actors are renderable
+        this.ecs.get_all_components('Actor')
+            .filter(c => c.has('Position'))
+            .forEach(c => {
+               const a = c.get('Actor');
+               const pos = c.get('Position');
+               ctx.fillText(
+                    a.char,
+                    pos.x*map.tileSize,
+                    pos.y*map.tileSize,
+                );
+            })
 	}
 
-    run() {
-        this.draw();
+    update() {
         this.ecs.update();
+        this.draw();
     }
 }
 
 
+class Action {
+    constructor(g) { this.game = g }
+}
 
+class MovementAction extends Action {
+    perform (entity, dx,dy) {
+        const { ecs, map } = this.game;
+
+        const pos = ecs.get_components(entity).get('Position');
+
+        if(!map.inBounds(pos.x+dx, pos.y+dy)) return;
+
+        const tile  = this.game.map.getTile(pos.x+dx, pos.y+dy);
+        if (tile.blocked) return;
+
+        pos.move(dx, dy);
+    }
+}

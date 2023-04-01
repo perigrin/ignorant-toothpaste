@@ -23,8 +23,7 @@
         const g = new Game();
         document.querySelector("html")
 		 		.onkeypress = (e) => g.handleInput(e);
-
-        setInterval(() =>  g.run(), 15)
+        setInterval(() =>  g.update(), 15)
     </script>
     </body>
 </html>
