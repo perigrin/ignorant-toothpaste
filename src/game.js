@@ -195,13 +195,20 @@ class ComponentContainer {
 	map = {};
 
 	add(c) { this.map[c.constructor.name] = c }
-	has(c) { return c in this.map }
-	has_all(comps) {
-        const p = comps.every( c => (this.map[c] !== undefined));
-        return p;
+	has(Class) {
+        if (this.map[Class.constructor.name] !== undefined)
+            return true;
+        return Object.values(this.map).some(c => (c instanceof Class));
     }
-	get(c) { return this.map[c] }
-	remove(c) { delete this.map[c] }
+	has_all(comps) {
+        return comps.every( C => this.has(C) );
+    }
+	get(Class) {
+        if (this.map[Class.constructor.name] !== undefined)
+            return this.map[Class]
+        return Object.values(this.map).find(c => (c instanceof Class))
+    }
+	remove(Class) { delete this.map[Class.constructor.name] }
 
 }
 
@@ -294,7 +301,7 @@ class Viewshed extends Component {
 }
 
 class VisibilitySystem extends System {
-	components_required = ['Position', 'Viewshed'];
+	components_required = [Position, Viewshed];
 
     constructor(m, p) {
         super(m);
@@ -304,7 +311,6 @@ class VisibilitySystem extends System {
 
 	update() {
         const { ecs, entities, map } = this;
-
         const fov = (p, r, m) => {
             const indexes = [m.getIndexFromPoint(p)];
             for (let x = p.x - r; x < p.x + r; x++) {
@@ -319,8 +325,9 @@ class VisibilitySystem extends System {
         };
 
 		entities.forEach(e => {
-            const pos = ecs.get_components(e).get('Position');
-            const v = ecs.get_components(e).get('Viewshed');
+            const pos = ecs.get_components(e).get(Position);
+            const v = ecs.get_components(e).get(Viewshed);
+
                 // don't do anything if our viewshed hasn't changed
                if (!v.dirty) return;
 
@@ -345,6 +352,9 @@ class Actor extends Component {
 	}
 }
 
+class Player extends Actor  { char = '@' }
+class Monster extends Actor { char = 'm' }
+
 class Game {
 	ecs = new ECS();
     actions_pending = [];
@@ -367,9 +377,7 @@ class Game {
 
 	#initPlayer() {
 		this.player = this.ecs.add_entity();
-		this.ecs.add_component(this.player, new Actor({
-			char: '@'
-		}));
+		this.ecs.add_component(this.player, new Player());
 		this.ecs.add_component(this.player, new Position(
 			this.map.rooms[0].center().x,
 			this.map.rooms[0].center().y,
@@ -382,7 +390,7 @@ class Game {
         this.map.rooms.filter((_, i) => i !== 0).forEach(r => {
             const c = r.center();
             const m = this.ecs.add_entity();
-            this.ecs.add_component(m, new Actor({ char: 'm' }));
+            this.ecs.add_component(m, new Monster());
             this.ecs.add_component(m, new Position(c.x, c.y, this.map));
             this.ecs.add_component(m, new Viewshed());
         });
@@ -428,17 +436,16 @@ class Game {
 
 		ctx.clearRect(0,0,canvas.width,canvas.height);
 
-        const pv = ecs.get_components(this.player).get('Viewshed');
+        const pv = ecs.get_components(this.player).get(Viewshed);
 
         // draw the map
         map.forEachTile((_,t) => {
             if (t.seen) ctx.fillText(t.char, t.x, t.y)
         })
-
         // for now all Actors are renderable
-        ecs.get_all_components('Actor')
-            .filter(c => c.has('Position'))
-            .map(c => ({ a: c.get('Actor'), pos: c.get('Position')}) )
+        ecs.get_all_components(Actor)
+            .filter(c => c.has(Position))
+            .map(c => ({ a: c.get(Actor), pos: c.get(Position)}) )
             .filter(p => pv.visible(map.getIndexFromPoint(p.pos)))
             .forEach(p => {
                const {a, pos} = p;
@@ -473,7 +480,7 @@ class MovementAction extends Action {
     perform () {
         const {entity, dx, dy} = this;
         const { ecs, map } = this.game;
-        const pos = ecs.get_components(entity).get('Position');
+        const pos = ecs.get_components(entity).get(Position);
 
         if(!map.inBounds(pos.x+dx, pos.y+dy)) return;
 
@@ -481,6 +488,6 @@ class MovementAction extends Action {
         if (tile.blocked) return;
 
         pos.move(dx, dy);
-        ecs.get_components(entity).get('Viewshed').dirty = true;
+        ecs.get_components(entity).get(Viewshed).dirty = true;
     }
 }
