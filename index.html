@@ -22,8 +22,8 @@
         <script>
         const g = new Game();
         document.querySelector("html")
-		 		.onkeydown = (e) => g.handleInput(e);
-        setInterval(() =>  g.update(), 15)
+		 		.onkeydown = (e) => { g.update(); g.handleInput(e); };
+        setInterval(() => g.update(), 15);
     </script>
     </body>
 </html>
