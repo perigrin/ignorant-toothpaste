@@ -32,7 +32,6 @@ class Tile {
 }
 
 class Room {
-
 	constructor(x,y,h,w) {
 		this.x = x;
 		this.y = y;
@@ -59,13 +58,23 @@ class Room {
 }
 
 class GameMap {
+    levels = [];
+    constructor(width=80,height=50,tileSize=10) {
+		this.tileSize = tileSize;
+        this.levels.push(new Level(width, height));
+    }
+
+    #level = 0;
+    currentLevel() { return this.levels[this.#level] }
+}
+
+class Level {
 	tiles = []
 	rooms = [];
 
-	constructor(width=80,height=50,tileSize=10) {
+	constructor(width=80,height=50) {
 		this.height = height;
 		this.width = width;
-		this.tileSize = tileSize;
 
 		this.forEachTile(
 			(i,t,p) => { this.tiles[i] = Tile.WallTile(
@@ -86,19 +95,15 @@ class GameMap {
 		}
 	}
 
-    getPointForTile(t) {
-
-        return {
-            x: t.x,
-            y: t.y,
-        }
+    getPointForTile({x, y}) {
+        return { x, y }
     }
+
 	getIndexFromXY(x,y) {
 		return (y * this.width) + x
 	}
 
-    getIndexFromPoint(p) {
-        const {x,y} = p;
+    getIndexFromPoint({x,y}) {
         return this.getIndexFromXY(x,y);
     }
 
@@ -153,7 +158,6 @@ class GameMap {
 		const MAX_SIZE = 10;
 		const MAX_ROOMS = 40;
 
-
 		for (let idx = 0; idx < MAX_ROOMS; idx++) {
 			const w = GetRandomBetween(MIN_SIZE, MAX_SIZE);
 			const h = GetRandomBetween(MIN_SIZE, MAX_SIZE)
@@ -162,16 +166,15 @@ class GameMap {
 
 			const new_room = new Room(x,y,h,w);
 
-			if (!this.inBounds(x,y))
-				continue;
+			if (!this.inBounds(x,y)) continue;
 
-			if (this.rooms.some(r => r.intersects(new_room)))
-				continue;
+			if (this.rooms.some(r => r.intersects(new_room))) continue;
 
 			if (this.rooms.length != 0) {
 				const last_room = this.rooms[this.rooms.length-1];
 				this.connectRooms(last_room, new_room)
 			}
+
 			this.addRoom(new_room);
 		}
 	}
@@ -205,22 +208,22 @@ class System {
 }
 
 class ComponentContainer {
-	map = {};
+	containers = {};
 
-	add(c) { this.map[c.constructor.name] = c }
+	add(c) { this.containers[c.constructor.name] = c }
 	has(Class) {
-        if (this.map[Class.constructor.name] !== undefined) return true;
-        return Object.values(this.map).some(c => (c instanceof Class));
+        if (this.containers[Class.constructor.name] !== undefined) return true;
+        return Object.values(this.containers).some(c => (c instanceof Class));
     }
 	has_all(comps) {
         return comps.every( C => this.has(C) );
     }
 	get(Class) {
-        if (this.map[Class.constructor.name] !== undefined)
-            return this.map[Class]
-        return Object.values(this.map).find(c => (c instanceof Class))
+        if (this.containers[Class.constructor.name] !== undefined)
+            return this.containers[Class]
+        return Object.values(this.containers).find(c => (c instanceof Class))
     }
-	remove(Class) { delete this.map[Class.constructor.name] }
+	remove(Class) { delete this.containers[Class.constructor.name] }
 
 }
 
@@ -286,18 +289,18 @@ class ActionQueue extends Component {
 }
 
 class Position extends Component {
-	constructor(x=0,y=0,m) {
+	constructor(x=0,y=0,l) {
 		super(x,y);
 		this.x = x;
 		this.y = y;
-        this.map = m;
-        m.blockTile(this);
+        this.level = l;
+        l.blockTile(this);
 	}
 	move(dx,dy) {
-        this.map.unblockTile(this);
+        this.level.unblockTile(this);
 		this.x += dx;
 		this.y += dy;
-        this.map.blockTile(this);;
+        this.level.blockTile(this);;
 	}
 
 }
@@ -365,37 +368,39 @@ class AStar {
 class VisibilitySystem extends System {
 	components_required = [Position, Viewshed];
 
-    constructor(m, p) {
+    constructor(l, p) {
         super();
-        this.map = m;
+        this.level = l;
         this.player = p;
     }
 
-	update() {
-        const { ecs, entities, map } = this;
-        const fov = (p, r, m) => {
-            const indexes = [m.getIndexFromPoint(p)];
-            for (let x = p.x - r; x < p.x + r; x++) {
-                for (let y = p.y - r; y < p.y + r; y++) {
-                    if (!m.inBounds(x,y))
-                        continue;
+    static fov (p, r, l) {
+        const indexes = [l.getIndexFromPoint(p)];
+        for (let x = p.x - r; x < p.x + r; x++) {
+            for (let y = p.y - r; y < p.y + r; y++) {
+                if (!l.inBounds(x,y))
+                    continue;
 
-                    indexes.push(m.getIndexFromXY(x,y));
-                }
+                indexes.push(l.getIndexFromXY(x,y));
             }
-            return indexes;
-        };
+        }
+        return indexes;
+    };
+
+	update() {
+        const { ecs, entities, level } = this;
 
 		entities.forEach(e => {
             const pos = ecs.get_components(e).get(Position);
             const v = ecs.get_components(e).get(Viewshed);
-               if (!v.dirty) return;// if no viewshed change, don't update
+            if (!v.dirty) return;// if no viewshed change, don't update
 
-                v.visible_tiles = fov({x: pos.x, y: pos.y}, v.range, this.map);
-                // update what the player can see
-                if (e == this.player) {
-                    v.visible_tiles.filter(i => map.tiles[i])
-                                   .forEach(i => map.tiles[i].seen = true);
+            const level = this.level;
+            v.visible_tiles = VisibilitySystem.fov({x: pos.x, y: pos.y}, v.range, level);
+            // update what the player can see
+            if (e == this.player) {
+                    v.visible_tiles.filter(i => level.tiles[i])
+                                   .forEach(i => level.tiles[i].seen = true);
                     v.dirty = false;
                 }
 		});
@@ -418,9 +423,10 @@ class MovementAction extends Action {
         const {entity, dx, dy} = this;
         const { ecs, map } = this.game;
         const pos = ecs.get_components(entity).get(Position);
+        const l = map.currentLevel();
 
-        if(!map.inBounds(pos.x+dx, pos.y+dy)) return;
-        if (map.getTile(pos.x+dx, pos.y+dy).blocked) return;
+        if(!l.inBounds(pos.x+dx, pos.y+dy)) return;
+        if (l.getTile(pos.x+dx, pos.y+dy).blocked) return;
 
         pos.move(dx, dy);
         ecs.get_components(entity).get(Viewshed).dirty = true;
@@ -442,6 +448,7 @@ class MonsterAISystem extends System {
     update() {
         const { game, entities } = this;
         const {map, ecs} = game;
+        const level = map.currentLevel();
         const p_pos = ecs.get_components(game.player).get(Position);
         entities.forEach(e => {
             const move = (dx,dy) => new MovementAction(game, e, dx, dy);
@@ -449,10 +456,10 @@ class MonsterAISystem extends System {
             const v = cs.get(Viewshed);
             const q = cs.get(ActionQueue);
             const p = cs.get(Position);
-            if (v.visible(map.getIndexFromPoint(p_pos))) {
-                const path = AStar.get_path(map, p, p_pos);
+            if (v.visible(level.getIndexFromPoint(p_pos))) {
+                const path = AStar.get_path(level, p, p_pos);
                 if (path.length > 1) {
-                    const next = map.getTile(path[1].x, path[1].y);
+                    const next = level.getTile(path[1].x, path[1].y);
                     if (!next.blocked)
                         q.nextAction = move(path[1].x-p.x, path[1].y-p.y);
                 }
@@ -468,9 +475,10 @@ class Game {
 		const canvas = document.querySelector('#game');
 		const ctx = canvas.getContext("2d");
 		const map = this.map;
+        const level = this.map.currentLevel();
 
-		canvas.width = map.tileSize * map.width;
-		canvas.height = map.tileSize * map.height;
+		canvas.width = map.tileSize * level.width;
+		canvas.height = map.tileSize * level.height;
 		canvas.style.width = canvas.width + 'px' ;
 		canvas.style.height = canvas.height + 'px';
 
@@ -481,23 +489,26 @@ class Game {
 	}
 
 	#initPlayer() {
+        const level = this.map.currentLevel();
+
 		this.player = this.ecs.add_entity();
 		this.ecs.add_component(this.player, new Player());
 		this.ecs.add_component(this.player, new Position(
-			this.map.rooms[0].center().x,
-			this.map.rooms[0].center().y,
-            this.map,
+			level.rooms[0].center().x,
+			level.rooms[0].center().y,
+            level,
 		));
         this.ecs.add_component(this.player, new Viewshed());
         this.ecs.add_component(this.player, new ActionQueue());
 	}
 
     #initMonsters() {
-        this.map.rooms.filter((_, i) => i !== 0).forEach(r => {
+        const level = this.map.currentLevel();
+        level.rooms.filter((_, i) => i !== 0).forEach(r => {
             const c = r.center();
             const m = this.ecs.add_entity();
             this.ecs.add_component(m, new Monster());
-            this.ecs.add_component(m, new Position(c.x, c.y, this.map));
+            this.ecs.add_component(m, new Position(c.x, c.y, level));
             this.ecs.add_component(m, new Viewshed());
             this.ecs.add_component(m, new ActionQueue());
         });
@@ -508,7 +519,7 @@ class Game {
 	}
 
     #initSystems() {
-        this.ecs.add_system(new VisibilitySystem(this.map, this.player));
+        this.ecs.add_system(new VisibilitySystem(this.map.currentLevel(), this.player));
         this.ecs.add_system(new MonsterAISystem(this));
     }
 
@@ -543,22 +554,22 @@ class Game {
 
 	draw() {
 		const { ecs, map, ctx, canvas } = this;
+        const level = map.currentLevel()
 
 		ctx.clearRect(0,0,canvas.width,canvas.height);
 
-        map.forEachTile((_,t) => {
+        level.forEachTile((_,t) => {
             if (t.seen) ctx.fillText(
                 t.char,
                 t.x*map.tileSize,
                 t.y*map.tileSize
             );
         })
-
         const pv = ecs.get_components(this.player).get(Viewshed);
         ecs.get_all_components(Actor) // for now, Actors are renderable
             .filter(c => c.has(Position))
             .map(c => ({ a: c.get(Actor), pos: c.get(Position)}) )
-            .filter(p => pv.visible(map.getIndexFromPoint(p.pos)))
+            .filter(p => pv.visible(level.getIndexFromPoint(p.pos)))
             .forEach(p => {
                const {a, pos} = p;
                ctx.fillText(
