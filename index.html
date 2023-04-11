@@ -1,29 +1,47 @@
 <!DOCTYPE html>
 <html>
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Ignorant Toothpaste</title>
-        <style>
-            canvas {
-                outline: 1px solid black;
-                color: black;
-            }
-            body {
-                background-color: grey;
-                text-align: center;
-                margin-top: 50px;
-            }
-        </style>
-    </head>
-    <body>
-        <canvas id="game"></canvas>
-        <script src="src/game.js"></script>
-        <script>
-        const g = new Game();
-        document.querySelector("html")
-		 		.onkeydown = (e) => { g.update(); g.handleInput(e); };
-        setInterval(() => g.update(), 15);
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ignorant Toothpaste</title>
+    <style>
+      canvas {
+        outline: 1px solid black;
+        background-color: grey;
+        color: black;
+      }
+      body {
+        background-color: white;
+        text-align: center;
+        margin-top: 50px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Ignorant Toothpaste</h1>
+    <canvas id="game"></canvas>
+    <p>
+      This is a little roguelike game, built out of pure JS and far too much
+      free time. The name is entirely random and meaninless.
+    </p>
+    <p>
+      See this
+      <a href="https://ack.nerdfight.online/notice/AUXABPqenwz1HejRSK">toot</a>
+      for a bit more explaination.
+    </p>
+    <p>
+      Output from the game is currently in the browser console. If you don't
+      know how ot see the browser console, you maybe wanna wait till I implement
+      some UI.
+    </p>
+    <script src="src/game.js"></script>
+    <script>
+      const g = new Game();
+      document.querySelector("html").onkeydown = (e) => {
+        g.update();
+        g.handleInput(e);
+      };
+      setInterval(() => g.update(), 15);
     </script>
-    </body>
+  </body>
 </html>
