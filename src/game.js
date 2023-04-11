@@ -1,8 +1,12 @@
 const GetDiceRoll = (i) => (Math.floor(Math.random() * i)+1);
+const GetMultiDiceRoll = (n,d) => [0..n].map(_ => GetDiceRoll(d));
 const GetRandomBetween = (l,h) => (GetDiceRoll(h-l)+h);
+
 
 const MDistance = (here, there) => // simple manhattan distance
     (Math.abs(here.x - there.x)+Math.abs(here.y-there.y))
+
+const EqualPositions = (n, o) => (n.x === o.x && n.y === o.y)
 
 class Tile {
 	static WallTile(x, y, c='#', b=true) {
@@ -202,6 +206,9 @@ class System {
     entities = [];
     ecs = false;
 
+    constructor(game) {
+        this.game = game;
+    }
 	update() {}
     add(e) { this.entities.push(e) }
     remove(en) { this.entities = this.entities.filter(e => (e != en)) }
@@ -250,6 +257,10 @@ class ECS {
        this.checkE(e);
     }
 
+    find_entity(f) {
+       return Object.keys(this.entities).find(e => f(this.get_components(e)));
+    }
+
     get_all_components(c) {
         return Object.values(this.entities).filter(comp => comp.has(c));
     }
@@ -270,7 +281,7 @@ class ECS {
 	}
 
 	destroy_entity(e) {
-		this.systems.forEach(s => s.remove_entity(e));
+		this.systems.forEach(s => s.remove(e));
 		this.remove_entity(e);
 	}
 
@@ -284,9 +295,31 @@ class ECS {
 	}
 }
 
-class ActionQueue extends Component {
-    nextAction;
+class Actor extends Component {
+    static StatsRoll = () => {
+        // [lowest 2 8d10]/2 + 3
+        const rolls = GetMultiDiceRoll(8,10).sort((a,b) => a < b).slice(0,2).reduce((a,v) => a+v);
+        return Math.round(rolls/2) + 3
+    }
+
+    static  stat_names = ['strength', 'endurance', 'agility', 'luck']  // don't need SPECIAL yet
+
+    constructor() {
+        super();
+        Actor.stat_names.forEach(a => (this[a] = Actor.StatsRoll()));
+    }
+
+    max_health() {
+        return this.endurance + this.luck
+    }
+
 }
+
+// TODO differentiate stats between Players and Monsters
+class Player  extends Actor     { char = '@' }
+class Monster extends Actor     { char = 'm' } // TODO different monsters
+
+class ActionQueue extends Component { nextAction = false; }
 
 class Position extends Component {
 	constructor(x=0,y=0,l) {
@@ -296,13 +329,24 @@ class Position extends Component {
         this.level = l;
         l.blockTile(this);
 	}
+
+    block() { this.level.blockTile(this) }
+    unblock() { this.level.unblockTile(this) }
+
 	move(dx,dy) {
-        this.level.unblockTile(this);
+        this.unblock();
 		this.x += dx;
 		this.y += dy;
-        this.level.blockTile(this);;
+        this.block();
 	}
 
+}
+
+class Health extends Component {
+    constructor(health) {
+        super()
+        this.current_health = health;
+    }
 }
 
 class Viewshed extends Component {
@@ -319,8 +363,6 @@ class Viewshed extends Component {
 }
 
 class AStar {
-    static equal_nodes(n, o) { return n.x === o.x && n.y === o.y }
-
     static get_path(level, s, e) {
         const start = { position: s, f: 0, g: 0, h: 0 };
         const enp = { position: e, f: 0, g: 0, h: 0 };
@@ -333,7 +375,7 @@ class AStar {
             const current = fringe.shift();
             closed[id(current)] = current;
 
-            if (AStar.equal_nodes(current.position, enp.position)) {
+            if (EqualPositions(current.position, enp.position)) {
                 const path = [];
                 let c = current;
                 do{ path.unshift(c.position) } while (c = c.parent)
@@ -368,10 +410,10 @@ class AStar {
 class VisibilitySystem extends System {
 	components_required = [Position, Viewshed];
 
-    constructor(l, p) {
-        super();
-        this.level = l;
-        this.player = p;
+    constructor(g) {
+        super(g);
+        this.level = g.map.currentLevel();
+        this.player = g.player;
     }
 
     static fov (p, r, l) {
@@ -408,14 +450,16 @@ class VisibilitySystem extends System {
 }
 
 class Action {
-    constructor(g) { this.game = g }
+    constructor(g,e) {
+        this.game = g;
+        this.entity = e;
+    }
     perform() { }
 }
 
 class MovementAction extends Action {
     constructor(g, e, dx, dy) {
-        super(g);
-        this.entity = e;
+        super(g, e);
         this.dx = dx;
         this.dy = dy;
     }
@@ -426,16 +470,59 @@ class MovementAction extends Action {
         const l = map.currentLevel();
 
         if(!l.inBounds(pos.x+dx, pos.y+dy)) return;
-        if (l.getTile(pos.x+dx, pos.y+dy).blocked) return;
+        const tile = l.getTile(pos.x+dx, pos.y+dy);
+        if (tile.blocked) {
+            // get monster at that position:
+            const monster = this.game.ecs.find_entity((e) => EqualPositions(e.get(Position), tile));
+            if (monster) {
+                return new MeleeAttack(this.game, this.entity, monster);
+            }
+            else {
+                return // nothing to attack but we can't move there so  ... "bump"
+            }
+        }
 
         pos.move(dx, dy);
         ecs.get_components(entity).get(Viewshed).dirty = true;
     }
 }
 
-class Actor   extends Component {}
-class Player  extends Actor     { char = '@' }
-class Monster extends Actor     { char = 'm' }
+class MeleeAttack extends Action {
+    constructor(g,e,d) {
+        super(g,e)
+        this.defender = d;
+    }
+
+   #actors() {
+        const a = this.game.ecs.get_components(this.entity).get(Actor)
+        const d = this.game.ecs.get_components(this.defender).get(Actor)
+        return { a, d }
+   }
+
+   #check_for_hit() {
+        const { a, d } = this.#actors();
+        // TODO replace raw agility with derived attack/dodge stats
+        return  GetMultiDiceRoll(a.agility, 10) > GetMultiDiceRoll(d.agility,10);
+   }
+
+   #calculate_damage() {
+        const { a, d } = this.#actors();
+        // TODO replace raw strenght with a derived damage roll stat
+        return Math.abs((GetMultiDiceRoll(a.strength, 10) - GetMultiDiceRoll(d.endurance, 10)));
+   }
+
+   perform() {
+        if (!this.#check_for_hit()) return; // no hit no combat
+        const { a, d } = this.#actors();
+        const damage = this.#calculate_damage();
+        console.log(`${a.char} hits ${d.char} for ${damage} points of damage`);
+        const h = this.game.ecs.get_components(this.defender).get(Health)
+        h.current_health -= damage;
+        console.log(`${d.char} is at ${h.current_health} health`);
+   }
+}
+
+
 
 class MonsterAISystem extends System {
 	components_required = [Monster];
@@ -446,8 +533,8 @@ class MonsterAISystem extends System {
     }
 
     update() {
-        const { game, entities } = this;
-        const {map, ecs} = game;
+        const { game, entities, ecs } = this;
+        const {map} = game;
         const level = map.currentLevel();
         const p_pos = ecs.get_components(game.player).get(Position);
         entities.forEach(e => {
@@ -468,8 +555,33 @@ class MonsterAISystem extends System {
     }
 }
 
+class SamsaraSystem extends System {
+	components_required = [Health, Actor, Position];
+
+    update() {
+        const { game, ecs, entities } = this;
+        console.log("Checking for death and rebirth");
+        entities.forEach(e => {
+            const cs = ecs.get_components(e);
+            const h = cs.get(Health);
+            const a = cs.get(Actor);
+            if (h.current_health <= 0) {
+                console.log(`${a.char} has died`);
+                if (a instanceof Player)
+                    console.log("Game Over."); // TODO respawn player
+                if (a instanceof Monster)
+                    console.log("I should probably spawn another monster"); // TODO respawn monster
+                const p = cs.get(Position);
+                p.unblock(); // unblock the position
+                ecs.destroy_entity(e);
+            }
+        })
+    }
+} // handle death and rebirth
+
 class Game {
 	ecs = new ECS();
+    map = new GameMap();
 
 	#initCanvas() {
 		const canvas = document.querySelector('#game');
@@ -488,39 +600,36 @@ class Game {
 		this.canvas = canvas;
 	}
 
+    #init_actor(actor, position) {
+       const e = this.ecs.add_entity();
+       this.ecs.add_component(e, actor);
+       this.ecs.add_component(e, new Health(actor.max_health()));
+       this.ecs.add_component(e, position);
+       this.ecs.add_component(e, new Viewshed());
+       this.ecs.add_component(e, new ActionQueue());
+       return e;
+    }
+
 	#initPlayer() {
         const level = this.map.currentLevel();
-
-		this.player = this.ecs.add_entity();
-		this.ecs.add_component(this.player, new Player());
-		this.ecs.add_component(this.player, new Position(
-			level.rooms[0].center().x,
-			level.rooms[0].center().y,
-            level,
-		));
-        this.ecs.add_component(this.player, new Viewshed());
-        this.ecs.add_component(this.player, new ActionQueue());
+        const { x, y } = level.rooms[0].center(); // TODO replace with level entrance
+        this.player = this.#init_actor(new Player(), new Position( x, y, level));
 	}
+
+    spawn_monster(level, room) { // TODO take count of how many to spawn
+        const c = room.center(); // TODO replace with variable spawn points
+        this.#init_actor(new Monster(), new Position(c.x, c.y, level))
+    }
 
     #initMonsters() {
         const level = this.map.currentLevel();
-        level.rooms.filter((_, i) => i !== 0).forEach(r => {
-            const c = r.center();
-            const m = this.ecs.add_entity();
-            this.ecs.add_component(m, new Monster());
-            this.ecs.add_component(m, new Position(c.x, c.y, level));
-            this.ecs.add_component(m, new Viewshed());
-            this.ecs.add_component(m, new ActionQueue());
-        });
+        level.rooms.filter((_, i) => i !== 0).forEach(r => this.spawn_monster(level, r));
     }
 
-	#initMap () {
-		this.map = new GameMap();
-	}
-
     #initSystems() {
-        this.ecs.add_system(new VisibilitySystem(this.map.currentLevel(), this.player));
+        this.ecs.add_system(new VisibilitySystem(this));
         this.ecs.add_system(new MonsterAISystem(this));
+        this.ecs.add_system(new SamsaraSystem(this));
     }
 
     #initKeymap() {
@@ -538,7 +647,6 @@ class Game {
     }
 
 	constructor() {
-		this.#initMap(); // TODO fix this so it's not order dependent
 		this.#initCanvas()
 		this.#initPlayer();
         this.#initMonsters();
@@ -585,12 +693,12 @@ class Game {
         const actors = this.ecs.get_all_components(Actor)
             .filter(a => a.has(ActionQueue))
 
-        let q = actors[this.turn].get(ActionQueue)
+        let q = actors[this.turn % actors.length].get(ActionQueue)
         //TODO implement energy based action activation
         while(q.nextAction) {
             q.nextAction = q.nextAction.perform()
         }
-        this.turn = (this.turn + 1) % actors.length;
+        this.turn++;
         this.ecs.update();
         this.draw();
     }
