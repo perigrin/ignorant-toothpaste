@@ -15,11 +15,22 @@
         text-align: center;
         margin-top: 50px;
       }
+      #log {
+        border: 1px solid black;
+        height: 30ex;
+        width: 65%;
+        margin: 0 auto;
+        text-align: left;
+        overflow: scroll;
+      }
+      #log p { margin: 0; padding: 0 }
+
     </style>
   </head>
   <body>
     <h1>Ignorant Toothpaste</h1>
     <canvas id="game"></canvas>
+    <div id="log"></div>
     <p>
       This is a little roguelike game, built out of pure JS and far too much
       free time. The name is entirely random and meaninless.
@@ -29,11 +40,6 @@
       See this
       <a href="https://ack.nerdfight.online/notice/AUXABPqenwz1HejRSK">toot</a>
       for a bit more explaination.
-    </p>
-    <p>
-      Output from the game is currently in the browser console. If you don't
-      know how ot see the browser console, you maybe wanna wait till I implement
-      some UI.
     </p>
     <script src="src/game.js"></script>
     <script>

@@ -84,7 +84,7 @@ class GameMap {
 }
 
 class SimpleLevelBuilder {
-
+    rooms = [];
     constructor(height, width) {
         this.level = new Level(height, width);
         let [x,y] = [0,0];
@@ -92,8 +92,11 @@ class SimpleLevelBuilder {
         this.level.forEachTile((i, t, p) => {
             this.level.tiles[i] = Tile.WallTile(p.x, p.y);
         });
-        console.log(this.level.tiles);
         this.createLevelTiles();
+        this.level.entrance = this.rooms[0].center()
+        this.level.spawn_points = this.rooms
+                                    .filter((_, i) => i !== 0)
+                                    .map((r) => r.center());
     }
 
     createLevelTiles() {
@@ -111,13 +114,12 @@ class SimpleLevelBuilder {
             const new_room = new Room(x, y, h, w);
 
 
-            console.log(x,y);
             if (!level.inBounds(x, y)) continue;
 
-            if (level.rooms.some((r) => r.intersects(new_room))) continue;
+            if (this.rooms.some((r) => r.intersects(new_room))) continue;
 
-            if (level.rooms.length != 0) {
-                const last_room = level.rooms[level.rooms.length - 1];
+            if (this.rooms.length != 0) {
+                const last_room = this.rooms[this.rooms.length - 1];
                 this.connectRooms(last_room, new_room);
             }
 
@@ -126,7 +128,7 @@ class SimpleLevelBuilder {
     }
 
     addRoom(r) {
-        this.level.rooms.push(r);
+        this.rooms.push(r);
         for (let x = 0; x < r.w; x++) {
             for (let y = 0; y < r.h; y++) {
                 const i = this.level.getIndexFromXY(r.x + x, r.y + y);
@@ -167,7 +169,6 @@ class SimpleLevelBuilder {
 
 class Level {
   tiles = [];
-  rooms = [];
 
   constructor(width = 80, height = 50) {
     this.height = height;
@@ -202,7 +203,6 @@ class Level {
 
   inBounds(x, y) {
     const idx = this.getIndexFromXY(x, y);
-    console.log(x,y, idx);
     return idx >= 0 && idx < this.tiles.length;
   }
 
@@ -573,10 +573,10 @@ class MeleeAttack extends Action {
     if (!this.#check_for_hit()) return; // no hit no combat
     const { a, d } = this.#actors();
     const damage = this.#calculate_damage();
-    console.log(`${a.char} hits ${d.char} for ${damage} points of damage`);
+    Game.log(`${a.char} hits ${d.char} for ${damage} points of damage`);
     const h = this.game.ecs.get_components(this.defender).get(Health);
     h.current_health -= damage;
-    console.log(`${d.char} is at ${h.current_health} health`);
+    Game.log(`${d.char} is at ${h.current_health} health`);
   }
 }
 
@@ -622,8 +622,8 @@ class SamsaraSystem extends System {
       const h = cs.get(Health);
       const a = cs.get(Actor);
       if (h.current_health <= 0) {
-        console.log(`${a.char} has died`);
-        if (a instanceof Player) console.log("Game Over."); // TODO respawn player
+        Game.log(`${a.char} has died`);
+        if (a instanceof Player) Game.log("Game Over."); // TODO respawn player
         if (a instanceof Monster)
           console.log("I should probably spawn another monster"); // TODO respawn monster
         const p = cs.get(Position);
@@ -637,6 +637,12 @@ class SamsaraSystem extends System {
 class Game {
   ecs = new ECS();
   map = new GameMap();
+
+  static log(message) {
+    const p = document.createElement('p')
+    p.textContent = message;
+    document.querySelector('#log').prepend(p);
+  }
 
   #initCanvas() {
     const canvas = document.querySelector("#game");
@@ -667,21 +673,17 @@ class Game {
 
   #initPlayer() {
     const level = this.map.currentLevel();
-    const { x, y } = level.rooms[0].center(); // TODO replace with level entrance
+    const { x, y } = level.entrance; // TODO replace with level entrance
     this.player = this.#init_actor(new Player(), new Position(x, y, level));
   }
 
-  spawn_monster(level, room) {
-    // TODO take count of how many to spawn
-    const c = room.center(); // TODO replace with variable spawn points
-    this.#init_actor(new Monster(), new Position(c.x, c.y, level));
+  spawn_monster(level, p) {
+    this.#init_actor(new Monster(), new Position(p.x, p.y, level));
   }
 
   #initMonsters() {
     const level = this.map.currentLevel();
-    level.rooms
-      .filter((_, i) => i !== 0)
-      .forEach((r) => this.spawn_monster(level, r));
+    level.spawn_points.forEach(p => this.spawn_monster(level, p))
   }
 
   #initSystems() {
