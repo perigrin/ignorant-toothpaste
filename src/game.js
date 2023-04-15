@@ -2,10 +2,9 @@ const GetDiceRoll = (i) => Math.floor(Math.random() * i) + 1;
 const GetMultiDiceRoll = (n, d) => [(0).n].map((_) => GetDiceRoll(d));
 const GetRandomBetween = (l, h) => GetDiceRoll(h - l) + h;
 
-const MDistance = (
-  here,
-  there // simple manhattan distance
-) => Math.abs(here.x - there.x) + Math.abs(here.y - there.y);
+// simple manhattan distance
+const MDistance = (here, there) =>
+  Math.abs(here.x - there.x) + Math.abs(here.y - there.y);
 
 const EqualPositions = (n, o) => n.x === o.x && n.y === o.y;
 
@@ -21,6 +20,7 @@ class Tile {
     this.char = char;
     this.blocked = blocked;
     this.seen = false;
+    this.color = "grey";
   }
 
   position() {
@@ -72,7 +72,7 @@ class Room {
 
 class GameMap {
   levels = [];
-  constructor(width = 80, height = 50, tileSize = 10) {
+  constructor(width, height, tileSize = 10) {
     this.tileSize = tileSize;
     this.levels.push(new SimpleLevelBuilder(width, height).level);
   }
@@ -84,72 +84,78 @@ class GameMap {
 }
 
 class SimpleLevelBuilder {
-    rooms = [];
-    constructor(height, width) {
-        this.level = new Level(height, width);
-        let [x,y] = [0,0];
+  rooms = [];
+  constructor(width, height) {
+    this.level = new Level(width, height);
 
-        this.level.forEachTile((i, t, p) => {
-            this.level.tiles[i] = Tile.WallTile(p.x, p.y);
-        });
-        this.createLevelTiles();
-        this.level.entrance = this.rooms[0].center()
-        this.level.spawn_points = this.rooms
-                                    .filter((_, i) => i !== 0)
-                                    .map((r) => r.center());
-    }
-
-    createLevelTiles() {
-        const MIN_SIZE = 3;
-        const MAX_SIZE = 10;
-        const MAX_ROOMS = 40;
-        const level = this.level;
-
-        for (let idx = 0; idx < MAX_ROOMS; idx++) {
-            const w = GetRandomBetween(MIN_SIZE, MAX_SIZE);
-            const h = GetRandomBetween(MIN_SIZE, MAX_SIZE);
-            const x = GetDiceRoll(level.width - w - 1);
-            const y = GetDiceRoll(level.height - h - 1);
-
-            const new_room = new Room(x, y, h, w);
-
-
-            if (!level.inBounds(x, y)) continue;
-
-            if (this.rooms.some((r) => r.intersects(new_room))) continue;
-
-            if (this.rooms.length != 0) {
-                const last_room = this.rooms[this.rooms.length - 1];
-                this.connectRooms(last_room, new_room);
-            }
-
-            this.addRoom(new_room);
+    for (let y = 0; y <= height; y++) {
+      for (let x = 0; x <= width; x++) {
+        if (this.level.inBounds(x, y)) {
+          const i = this.level.getIndexFromXY(x, y);
+          this.level.tiles[i] = Tile.WallTile(x, y);
         }
+      }
     }
 
-    addRoom(r) {
-        this.rooms.push(r);
-        for (let x = 0; x < r.w; x++) {
-            for (let y = 0; y < r.h; y++) {
-                const i = this.level.getIndexFromXY(r.x + x, r.y + y);
-                this.level.tiles[i].convertToFloor();
-            }
-        }
-    }
+    this.createLevel();
 
-    createHorizontalTunnel(x1, x2, y) {
-        for (let x = Math.min(x1, x2); x < Math.max(x1, x2) + 1; x++) {
-            if (this.level.inBounds(x, y))
-            this.level.tiles[this.level.getIndexFromXY(x, y)].convertToFloor();
-        }
-    }
+    this.level.entrance = { ...this.rooms[0].center(), level: this.level };
+    this.level.spawn_points = this.rooms
+      .filter((_, i) => i !== 0)
+      .map((r) => r.center());
+  }
 
-    createVerticalTunnel(y1, y2, x) {
-        for (let y = Math.min(y1, y2); y < Math.max(y1, y2) + 1; y++) {
-            if (this.level.inBounds(x, y))
-            this.level.tiles[this.level.getIndexFromXY(x, y)].convertToFloor();
-        }
+  createLevel() {
+    const MIN_SIZE = 3;
+    const MAX_SIZE = 10;
+    const MAX_ROOMS = 1;
+    const level = this.level;
+
+    for (let idx = 0; idx < MAX_ROOMS; idx++) {
+      const w = GetRandomBetween(MIN_SIZE, MAX_SIZE);
+      const h = GetRandomBetween(MIN_SIZE, MAX_SIZE);
+      const x = GetDiceRoll(level.width - w - 1);
+      const y = GetDiceRoll(level.height - h - 1);
+
+      const new_room = new Room(x, y, h, w);
+
+      if (!level.inBounds(x, y)) continue;
+
+      if (this.rooms.some((r) => r.intersects(new_room))) continue;
+
+      if (this.rooms.length != 0) {
+        const last_room = this.rooms[this.rooms.length - 1];
+        this.connectRooms(last_room, new_room);
+      }
+
+      this.addRoom(new_room);
     }
+  }
+
+  addRoom(r) {
+    this.rooms.push(r);
+    for (let x = 0; x <= r.w; x++) {
+      for (let y = 0; y <= r.h; y++) {
+        const i = this.level.getIndexFromXY(r.x + x, r.y + y);
+        console.log({ x: r.x + x, y: r.y + y }, "tile");
+        this.level.tiles[i].convertToFloor();
+      }
+    }
+  }
+
+  createHorizontalTunnel(x1, x2, y) {
+    for (let x = Math.min(x1, x2); x < Math.max(x1, x2) + 1; x++) {
+      if (this.level.inBounds(x, y))
+        this.level.tiles[this.level.getIndexFromXY(x, y)].convertToFloor();
+    }
+  }
+
+  createVerticalTunnel(y1, y2, x) {
+    for (let y = Math.min(y1, y2); y < Math.max(y1, y2) + 1; y++) {
+      if (this.level.inBounds(x, y))
+        this.level.tiles[this.level.getIndexFromXY(x, y)].convertToFloor();
+    }
+  }
 
   connectRooms(r1, r2) {
     const c1 = r1.center();
@@ -164,29 +170,15 @@ class SimpleLevelBuilder {
       this.createVerticalTunnel(c1.y, c2.y, c1.x);
     }
   }
-
 }
 
 class Level {
   tiles = [];
 
-  constructor(width = 80, height = 50) {
+  constructor(width, height) {
     this.height = height;
     this.width = width;
-  }
-
-  forEachTile(f, s = 0, y = 0) {
-    for (let x = 0; x < this.width; x++) {
-      for (let y = 0; y < this.height; y++) {
-        const p = { x, y };
-        const i = this.getIndexFromXY(x, y);
-        f(i, this.tiles[i], p);
-      }
-    }
-  }
-
-  getPointForTile({ x, y }) {
-    return { x, y };
+    this.tiles = new Array(height * width);
   }
 
   getIndexFromXY(x, y) {
@@ -202,8 +194,7 @@ class Level {
   }
 
   inBounds(x, y) {
-    const idx = this.getIndexFromXY(x, y);
-    return idx >= 0 && idx < this.tiles.length;
+    return x >= 0 && x < this.width && y >= 0 && y < this.height;
   }
 
   blockTile(p) {
@@ -221,7 +212,6 @@ class Level {
       [0, 1],
     ].map((n) => this.getTile(p.x + n[0], p.y + n[1]));
   }
-
 }
 
 class Component {}
@@ -342,6 +332,7 @@ class Actor extends Component {
 
   static stat_names = ["strength", "endurance", "agility", "luck"]; // don't need SPECIAL yet
 
+  color = "silver";
   constructor() {
     super();
     Actor.stat_names.forEach((a) => (this[a] = Actor.StatsRoll()));
@@ -355,6 +346,10 @@ class Actor extends Component {
 // TODO differentiate stats between Players and Monsters
 class Player extends Actor {
   char = "@";
+
+  max_health() {
+    return (this.endurance + this.luck) * 2; // double the health for now
+  }
 }
 class Monster extends Actor {
   char = "m";
@@ -365,12 +360,12 @@ class ActionQueue extends Component {
 }
 
 class Position extends Component {
-  constructor(x = 0, y = 0, l) {
-    super(x, y);
+  constructor({ x = 0, y = 0, level }) {
+    super();
     this.x = x;
     this.y = y;
-    this.level = l;
-    l.blockTile(this);
+    this.level = level;
+    this.block();
   }
 
   block() {
@@ -381,10 +376,12 @@ class Position extends Component {
   }
 
   move(dx, dy) {
+    console.log(this, "pre-move");
     this.unblock();
     this.x += dx;
     this.y += dy;
     this.block();
+    console.log(this, "post-move");
   }
 }
 
@@ -469,8 +466,8 @@ class VisibilitySystem extends System {
 
   static fov(p, r, l) {
     const indexes = [l.getIndexFromPoint(p)];
-    for (let x = p.x - r; x < p.x + r; x++) {
-      for (let y = p.y - r; y < p.y + r; y++) {
+    for (let y = p.y - r; y < p.y + r; y++) {
+      for (let x = p.x - r; x < p.x + r; x++) {
         if (!l.inBounds(x, y)) continue;
 
         indexes.push(l.getIndexFromXY(x, y));
@@ -526,6 +523,7 @@ class MovementAction extends Action {
 
     if (!l.inBounds(pos.x + dx, pos.y + dy)) return;
     const tile = l.getTile(pos.x + dx, pos.y + dy);
+    console.log(pos, { x: pos.x + dx, y: pos.y + dy }, tile, "move");
     if (tile.blocked) {
       // get monster at that position:
       const monster = this.game.ecs.find_entity((e) =>
@@ -533,13 +531,12 @@ class MovementAction extends Action {
       );
       if (monster) {
         return new MeleeAttack(this.game, this.entity, monster);
-      } else {
-        return; // nothing to attack but we can't move there so  ... "bump"
       }
+      return; // nothing to attack but we can't move there so  ... "bump"
+    } else {
+      pos.move(dx, dy);
+      ecs.get_components(entity).get(Viewshed).dirty = true;
     }
-
-    pos.move(dx, dy);
-    ecs.get_components(entity).get(Viewshed).dirty = true;
   }
 }
 
@@ -575,7 +572,7 @@ class MeleeAttack extends Action {
     const damage = this.#calculate_damage();
     Game.log(`${a.char} hits ${d.char} for ${damage} points of damage`);
     const h = this.game.ecs.get_components(this.defender).get(Health);
-    h.current_health -= damage;
+    if (this.defender != this.game.player) h.current_health -= damage;
     Game.log(`${d.char} is at ${h.current_health} health`);
   }
 }
@@ -602,9 +599,7 @@ class MonsterAISystem extends System {
       if (v.visible(level.getIndexFromPoint(p_pos))) {
         const path = AStar.get_path(level, p, p_pos);
         if (path.length > 1) {
-          const next = level.getTile(path[1].x, path[1].y);
-          if (!next.blocked)
-            q.nextAction = move(path[1].x - p.x, path[1].y - p.y);
+          q.nextAction = move(path[1].x - p.x, path[1].y - p.y);
         }
       }
     });
@@ -634,31 +629,48 @@ class SamsaraSystem extends System {
   }
 } // handle death and rebirth
 
+class Camera {
+  SHOW_BOUNDARIES = true;
+  constructor(g, width, height) {
+    this.x_chars = width;
+    this.y_chars = height;
+    this.center = {
+      x: Math.round(this.x_chars / 2),
+      y: Math.round(this.y_chars / 2),
+    };
+    this.game = g;
+  }
+
+  update(p) {
+    const min = { x: p.x - this.center.x, y: p.y - this.center.y };
+    const max = { x: min.x + this.x_chars, y: min.y + this.y_chars };
+    return [min, max];
+  }
+}
+
 class Game {
   ecs = new ECS();
-  map = new GameMap();
+  map = new GameMap(40, 40);
 
   static log(message) {
-    const p = document.createElement('p')
+    const p = document.createElement("p");
     p.textContent = message;
-    document.querySelector('#log').prepend(p);
+    document.querySelector("#log").prepend(p);
   }
 
   #initCanvas() {
     const canvas = document.querySelector("#game");
     const ctx = canvas.getContext("2d");
-    const map = this.map;
-    const level = this.map.currentLevel();
 
-    canvas.width = map.tileSize * level.width;
-    canvas.height = map.tileSize * level.height;
-    canvas.style.width = canvas.width + "px";
-    canvas.style.height = canvas.height + "px";
-
-    ctx.font = map.tileSize + "px monospace";
+    ctx.font = this.map.tileSize + "px monospace";
 
     this.ctx = ctx;
     this.canvas = canvas;
+    this.camera = new Camera(
+      this,
+      Math.round(canvas.width / this.map.tileSize),
+      Math.round(canvas.height / this.map.tileSize)
+    );
   }
 
   #init_actor(actor, position) {
@@ -673,17 +685,16 @@ class Game {
 
   #initPlayer() {
     const level = this.map.currentLevel();
-    const { x, y } = level.entrance; // TODO replace with level entrance
-    this.player = this.#init_actor(new Player(), new Position(x, y, level));
+    this.player = this.#init_actor(new Player(), new Position(level.entrance));
   }
 
   spawn_monster(level, p) {
-    this.#init_actor(new Monster(), new Position(p.x, p.y, level));
+    this.#init_actor(new Monster(), new Position({ ...p, level }));
   }
 
   #initMonsters() {
     const level = this.map.currentLevel();
-    level.spawn_points.forEach(p => this.spawn_monster(level, p))
+    level.spawn_points.forEach((p) => this.spawn_monster(level, p));
   }
 
   #initSystems() {
@@ -719,25 +730,59 @@ class Game {
     player.nextAction = this.keymap[e.code] || new Action(this);
   }
 
-  draw() {
-    const { ecs, map, ctx, canvas } = this;
+  #draw_map() {
+    const { map, ecs, ctx, camera } = this;
     const level = map.currentLevel();
+    const p = ecs.get_components(g.player).get(Position);
+    const [min, max] = camera.update(p);
+    for (let [ty, y] = [min.y, 0]; ty <= max.y; ty++ && y++) {
+      for (let [tx, x] = [min.x, 0]; tx <= max.x; tx++ && x++) {
+        if (level.inBounds(tx, ty)) {
+          const t = level.getTile(tx, ty);
+          ctx.fillStyle = t.color;
+          ctx.fillText(
+            t.char,
+            x * map.tileSize,
+            y * map.tileSize,
+            map.tileSize
+          );
+        } else if (camera.SHOW_BOUNDARIES) {
+          ctx.fillStyle = "red";
+          ctx.fillText("x", x * map.tileSize, y * map.tileSize, map.tileSize);
+        }
+      }
+    }
+  }
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    level.forEachTile((_, t) => {
-      if (t.seen) ctx.fillText(t.char, t.x * map.tileSize, t.y * map.tileSize);
-    });
+  #draw_actors() {
+    const { ecs, map, ctx } = this;
+    const level = map.currentLevel();
     const pv = ecs.get_components(this.player).get(Viewshed);
     ecs
-      .get_all_components(Actor) // for now, Actors are renderable
+      .get_all_components(Actor) // for now, all Actors are renderable
       .filter((c) => c.has(Position))
       .map((c) => ({ a: c.get(Actor), pos: c.get(Position) }))
       .filter((p) => pv.visible(level.getIndexFromPoint(p.pos)))
-      .forEach((p) => {
-        const { a, pos } = p;
-        ctx.fillText(a.char, pos.x * map.tileSize, pos.y * map.tileSize);
+      .forEach(({ a, pos }) => {
+        const [min] = this.camera.update(pos);
+        const x = pos.x - min.x;
+        const y = pos.y - min.y;
+        if (level.inBounds(x, y)) {
+          ctx.fillStyle = a.color;
+          ctx.fillText(a.char, x * map.tileSize, y * map.tileSize);
+        }
       });
+  }
+
+  #clear_canvas() {
+    const { ctx, canvas } = this;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  draw() {
+    this.#clear_canvas();
+    this.#draw_map();
+    this.#draw_actors();
   }
 
   turn = 0;
