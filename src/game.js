@@ -74,13 +74,95 @@ class GameMap {
   levels = [];
   constructor(width = 80, height = 50, tileSize = 10) {
     this.tileSize = tileSize;
-    this.levels.push(new Level(width, height));
+    this.levels.push(new SimpleLevelBuilder(width, height).level);
   }
 
   #level = 0;
   currentLevel() {
     return this.levels[this.#level];
   }
+}
+
+class SimpleLevelBuilder {
+
+    constructor(height, width) {
+        this.level = new Level(height, width);
+        let [x,y] = [0,0];
+
+        this.level.forEachTile((i, t, p) => {
+            this.level.tiles[i] = Tile.WallTile(p.x, p.y);
+        });
+        console.log(this.level.tiles);
+        this.createLevelTiles();
+    }
+
+    createLevelTiles() {
+        const MIN_SIZE = 3;
+        const MAX_SIZE = 10;
+        const MAX_ROOMS = 40;
+        const level = this.level;
+
+        for (let idx = 0; idx < MAX_ROOMS; idx++) {
+            const w = GetRandomBetween(MIN_SIZE, MAX_SIZE);
+            const h = GetRandomBetween(MIN_SIZE, MAX_SIZE);
+            const x = GetDiceRoll(level.width - w - 1);
+            const y = GetDiceRoll(level.height - h - 1);
+
+            const new_room = new Room(x, y, h, w);
+
+
+            console.log(x,y);
+            if (!level.inBounds(x, y)) continue;
+
+            if (level.rooms.some((r) => r.intersects(new_room))) continue;
+
+            if (level.rooms.length != 0) {
+                const last_room = level.rooms[level.rooms.length - 1];
+                this.connectRooms(last_room, new_room);
+            }
+
+            this.addRoom(new_room);
+        }
+    }
+
+    addRoom(r) {
+        this.level.rooms.push(r);
+        for (let x = 0; x < r.w; x++) {
+            for (let y = 0; y < r.h; y++) {
+                const i = this.level.getIndexFromXY(r.x + x, r.y + y);
+                this.level.tiles[i].convertToFloor();
+            }
+        }
+    }
+
+    createHorizontalTunnel(x1, x2, y) {
+        for (let x = Math.min(x1, x2); x < Math.max(x1, x2) + 1; x++) {
+            if (this.level.inBounds(x, y))
+            this.level.tiles[this.level.getIndexFromXY(x, y)].convertToFloor();
+        }
+    }
+
+    createVerticalTunnel(y1, y2, x) {
+        for (let y = Math.min(y1, y2); y < Math.max(y1, y2) + 1; y++) {
+            if (this.level.inBounds(x, y))
+            this.level.tiles[this.level.getIndexFromXY(x, y)].convertToFloor();
+        }
+    }
+
+  connectRooms(r1, r2) {
+    const c1 = r1.center();
+    const c2 = r2.center();
+
+    const coin = GetDiceRoll(2);
+    if (coin == 2) {
+      this.createHorizontalTunnel(c1.x, c2.x, c1.y);
+      this.createVerticalTunnel(c1.y, c2.y, c2.x);
+    } else {
+      this.createHorizontalTunnel(c1.x, c2.x, c2.y);
+      this.createVerticalTunnel(c1.y, c2.y, c1.x);
+    }
+  }
+
 }
 
 class Level {
@@ -90,11 +172,6 @@ class Level {
   constructor(width = 80, height = 50) {
     this.height = height;
     this.width = width;
-
-    this.forEachTile((i, t, p) => {
-      this.tiles[i] = Tile.WallTile(p.x, p.y);
-    });
-    this.createLevelTiles();
   }
 
   forEachTile(f, s = 0, y = 0) {
@@ -125,6 +202,7 @@ class Level {
 
   inBounds(x, y) {
     const idx = this.getIndexFromXY(x, y);
+    console.log(x,y, idx);
     return idx >= 0 && idx < this.tiles.length;
   }
 
@@ -144,69 +222,6 @@ class Level {
     ].map((n) => this.getTile(p.x + n[0], p.y + n[1]));
   }
 
-  addRoom(r) {
-    this.rooms.push(r);
-    for (let x = 0; x < r.w; x++) {
-      for (let y = 0; y < r.h; y++) {
-        const i = this.getIndexFromXY(r.x + x, r.y + y);
-        this.tiles[i].convertToFloor();
-      }
-    }
-  }
-
-  createHorizontalTunnel(x1, x2, y) {
-    for (let x = Math.min(x1, x2); x < Math.max(x1, x2) + 1; x++) {
-      if (this.inBounds(x, y))
-        this.tiles[this.getIndexFromXY(x, y)].convertToFloor();
-    }
-  }
-
-  createVerticalTunnel(y1, y2, x) {
-    for (let y = Math.min(y1, y2); y < Math.max(y1, y2) + 1; y++) {
-      if (this.inBounds(x, y))
-        this.tiles[this.getIndexFromXY(x, y)].convertToFloor();
-    }
-  }
-
-  createLevelTiles() {
-    const MIN_SIZE = 3;
-    const MAX_SIZE = 10;
-    const MAX_ROOMS = 40;
-
-    for (let idx = 0; idx < MAX_ROOMS; idx++) {
-      const w = GetRandomBetween(MIN_SIZE, MAX_SIZE);
-      const h = GetRandomBetween(MIN_SIZE, MAX_SIZE);
-      const x = GetDiceRoll(this.width - w - 1);
-      const y = GetDiceRoll(this.height - h - 1);
-
-      const new_room = new Room(x, y, h, w);
-
-      if (!this.inBounds(x, y)) continue;
-
-      if (this.rooms.some((r) => r.intersects(new_room))) continue;
-
-      if (this.rooms.length != 0) {
-        const last_room = this.rooms[this.rooms.length - 1];
-        this.connectRooms(last_room, new_room);
-      }
-
-      this.addRoom(new_room);
-    }
-  }
-
-  connectRooms(r1, r2) {
-    const c1 = r1.center();
-    const c2 = r2.center();
-
-    const coin = GetDiceRoll(2);
-    if (coin == 2) {
-      this.createHorizontalTunnel(c1.x, c2.x, c1.y);
-      this.createVerticalTunnel(c1.y, c2.y, c2.x);
-    } else {
-      this.createHorizontalTunnel(c1.x, c2.x, c2.y);
-      this.createVerticalTunnel(c1.y, c2.y, c1.x);
-    }
-  }
 }
 
 class Component {}
