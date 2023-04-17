@@ -642,7 +642,7 @@ class Camera {
     this.player = player;
   }
 
-  SHOW_BOUNDS = true;
+  SHOW_BOUNDS = false;
   render_map() {
     const { ctx, map } = this;
     const level = map.currentLevel();
