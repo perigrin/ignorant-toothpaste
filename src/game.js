@@ -471,7 +471,6 @@ class VisibilitySystem extends System {
 
   // TODO replace with a real FOV system
   static fov(p, r, l) {
-    const cells = l.getCellsInRange(p, r);
 
     const indexes = [l.getIndexFromPoint(p)];
     for (let x = p.x - r; x < p.x + r; x++) {
@@ -531,14 +530,13 @@ class MovementAction extends Action {
     const tile = l.getTile(pos.x + dx, pos.y + dy);
     if (tile.blocked) {
       // get monster at that position:
-      const monster = this.game.ecs.find_entity((e) =>
+      const enemy = this.game.ecs.find_entity((e) =>
         EqualPositions(e.get(Position), tile)
       );
-      if (monster) {
-        return new MeleeAttack(this.game, this.entity, monster);
-      } else {
-        return; // nothing to attack but we can't move there so  ... "bump"
+      if (enemy) {
+        return new MeleeAttack(this.game, this.entity, enemy);
       }
+      return; // nothing to attack but we can't move there so  ... "bump"
     }
 
     pos.move(dx, dy);
@@ -606,7 +604,6 @@ class MonsterAISystem extends System {
         const path = AStar.get_path(level, p, p_pos);
         if (path.length > 1) {
           const next = level.getTile(path[1].x, path[1].y);
-          if (!next.blocked)
             q.nextAction = move(path[1].x - p.x, path[1].y - p.y);
         }
       }
@@ -725,7 +722,6 @@ class Camera {
 
 class Game {
   ecs = new ECS();
-  map = new GameMap(80, 50, 10);
 
   static log(message) {
     const p = document.createElement("p");
@@ -738,11 +734,6 @@ class Game {
     const ctx = canvas.getContext("2d");
     const map = this.map;
     const level = this.map.currentLevel();
-
-    canvas.width = (map.tileSize * level.width) / 2;
-    canvas.height = (map.tileSize * level.height) / 2;
-    canvas.style.width = canvas.width + "px";
-    canvas.style.height = canvas.height + "px";
 
     ctx.font = map.tileSize + "px monospace";
 
@@ -795,7 +786,8 @@ class Game {
     };
   }
 
-  constructor() {
+  constructor(w=80, h=50, t=10) {
+    this.map = new GameMap(w,h,t);
     this.#initCanvas();
     this.#initPlayer();
     this.#initMonsters();
@@ -816,7 +808,7 @@ class Game {
       .filter((a) => a.has(ActionQueue));
 
     let q = actors[this.turn % actors.length].get(ActionQueue);
-    //TODO implement energy based action activation
+    //TODO implement action points system
     while (q.nextAction) {
       q.nextAction = q.nextAction.perform();
     }

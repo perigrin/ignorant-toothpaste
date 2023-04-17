@@ -29,7 +29,7 @@
   </head>
   <body>
     <h1>Ignorant Toothpaste</h1>
-    <canvas id="game"></canvas>
+    <canvas width="640" height="480" id="game"></canvas>
     <div id="log"></div>
     <p>
       This is a little roguelike game, built out of pure JS and far too much
@@ -43,7 +43,7 @@
     </p>
     <script src="src/game.js"></script>
     <script>
-      const g = new Game();
+      const g = new Game(80, 50);
       document.querySelector("html").onkeydown = (e) => {
         g.update();
         g.handleInput(e);
