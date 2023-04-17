@@ -72,7 +72,7 @@ class Room {
 
 class GameMap {
   levels = [];
-  constructor(width = 80, height = 50, tileSize = 10) {
+  constructor(width, height, tileSize = 10) {
     this.tileSize = tileSize;
     this.levels.push(new SimpleLevelBuilder(width, height).level);
   }
@@ -170,7 +170,7 @@ class SimpleLevelBuilder {
 class Level {
   tiles = [];
 
-  constructor(width = 80, height = 50) {
+  constructor(width, height) {
     this.height = height;
     this.width = width;
   }
@@ -203,7 +203,7 @@ class Level {
 
   inBounds(x, y) {
     const idx = this.getIndexFromXY(x, y);
-    return idx >= 0 && idx < this.tiles.length;
+    return 0 <= x <= this.width && 0 <= y <= this.height && idx >= 0 && idx < this.tiles.length
   }
 
   blockTile(p) {
@@ -467,13 +467,14 @@ class VisibilitySystem extends System {
     this.player = g.player;
   }
 
+  // TODO replace with a real FOV system
   static fov(p, r, l) {
+    const cells = l.getCellsInRange(p, r);
+
     const indexes = [l.getIndexFromPoint(p)];
     for (let x = p.x - r; x < p.x + r; x++) {
       for (let y = p.y - r; y < p.y + r; y++) {
-        if (!l.inBounds(x, y)) continue;
-
-        indexes.push(l.getIndexFromXY(x, y));
+        if (l.inBounds(x, y)) indexes.push(l.getIndexFromXY(x, y));
       }
     }
     return indexes;
@@ -634,9 +635,93 @@ class SamsaraSystem extends System {
   }
 } // handle death and rebirth
 
+class Camera {
+
+    constructor({ecs, ctx, map, player}) {
+        this.ecs = ecs;
+        this.ctx = ctx;
+        this.map = map;
+        this.player = player;
+    }
+
+    SHOW_BOUNDS = true;
+    render_map() {
+        const {ctx, map} = this;
+        const level = map.currentLevel();
+        const {min, max} = this.get_min_max();
+
+        let y = 0;
+        for (let ty = min.y; ty < max.y; ty++) {
+            let x = 0;
+            for (let tx = min.x; tx < max.x; tx++) {
+                if (level.inBounds(tx, ty)) {
+                    const t = level.getTile(tx,ty);
+                    if (t.seen) ctx.fillText(t.char, x * map.tileSize, y * map.tileSize);
+                } else {
+                    if (this.SHOW_BOUNDS) ctx.fillText('x', x * map.tileSize, y * map.tileSize);
+                }
+                x++
+            }
+            y++
+        }
+    }
+
+    get_min_max() {
+        const { height, width} = this.get_camera_view();
+        const center = {
+            x: Math.round(width / 2),
+            y: Math.round(height / 2),
+        };
+        const pos = this.ecs.get_components(this.player).get(Position);
+        const min = {
+                x: pos.x - center.x,
+                y: pos.y - center.y,
+            };
+        const max = {
+            x: min.x + width,
+            y: min.y + width,
+        };
+        return { min, max }
+    }
+
+    get_camera_view() {
+        const width = Math.round(this.ctx.canvas.width / this.map.tileSize);
+        const height = Math.round(this.ctx.canvas.height / this.map.tileSize);
+        return { width, height }
+    }
+
+    render_player_view() {
+        const {ecs, ctx, map, player} = this
+        const level = map.currentLevel();
+        const pv = ecs.get_components(player).get(Viewshed);
+        ecs.get_all_components(Actor) // for now, Actors are renderable
+        .filter((c) => c.has(Position))
+        .map((c) => ({ a: c.get(Actor), pos: c.get(Position) }))
+        .filter((p) => pv.visible(level.getIndexFromPoint(p.pos)))
+        .forEach((p) => {
+            const { a, pos } = p;
+            const { min } = this.get_min_max();
+            const x = pos.x - min.x
+            const y = pos.y - min.y
+            if(level.inBounds(x,y)) ctx.fillText(a.char, x * map.tileSize, y * map.tileSize);
+        });
+    }
+
+    render_view() {
+        const { ecs, map, ctx } = this;
+        const canvas = ctx.canvas;
+        const level = map.currentLevel();
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        this.render_map();
+        this.render_player_view();
+    }
+}
+
 class Game {
   ecs = new ECS();
-  map = new GameMap();
+  map = new GameMap(80,50,10);
 
   static log(message) {
     const p = document.createElement('p')
@@ -650,8 +735,8 @@ class Game {
     const map = this.map;
     const level = this.map.currentLevel();
 
-    canvas.width = map.tileSize * level.width;
-    canvas.height = map.tileSize * level.height;
+    canvas.width = map.tileSize * level.width / 2;
+    canvas.height = map.tileSize * level.height / 2;
     canvas.style.width = canvas.width + "px";
     canvas.style.height = canvas.height + "px";
 
@@ -712,6 +797,7 @@ class Game {
     this.#initMonsters();
     this.#initSystems();
     this.#initKeymap();
+    this.camera = new Camera(this);
   }
 
   handleInput(e) {
@@ -719,26 +805,7 @@ class Game {
     player.nextAction = this.keymap[e.code] || new Action(this);
   }
 
-  draw() {
-    const { ecs, map, ctx, canvas } = this;
-    const level = map.currentLevel();
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    level.forEachTile((_, t) => {
-      if (t.seen) ctx.fillText(t.char, t.x * map.tileSize, t.y * map.tileSize);
-    });
-    const pv = ecs.get_components(this.player).get(Viewshed);
-    ecs
-      .get_all_components(Actor) // for now, Actors are renderable
-      .filter((c) => c.has(Position))
-      .map((c) => ({ a: c.get(Actor), pos: c.get(Position) }))
-      .filter((p) => pv.visible(level.getIndexFromPoint(p.pos)))
-      .forEach((p) => {
-        const { a, pos } = p;
-        ctx.fillText(a.char, pos.x * map.tileSize, pos.y * map.tileSize);
-      });
-  }
 
   turn = 0;
   update() {
@@ -753,6 +820,6 @@ class Game {
     }
     this.turn++;
     this.ecs.update();
-    this.draw();
+    this.camera.render_view();
   }
 }
