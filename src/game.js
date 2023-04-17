@@ -84,72 +84,71 @@ class GameMap {
 }
 
 class SimpleLevelBuilder {
-    rooms = [];
-    constructor(height, width) {
-        this.level = new Level(height, width);
-        let [x,y] = [0,0];
+  rooms = [];
+  constructor(height, width) {
+    this.level = new Level(height, width);
+    let [x, y] = [0, 0];
 
-        this.level.forEachTile((i, t, p) => {
-            this.level.tiles[i] = Tile.WallTile(p.x, p.y);
-        });
-        this.createLevelTiles();
-        this.level.entrance = this.rooms[0].center()
-        this.level.spawn_points = this.rooms
-                                    .filter((_, i) => i !== 0)
-                                    .map((r) => r.center());
+    this.level.forEachTile((i, t, p) => {
+      this.level.tiles[i] = Tile.WallTile(p.x, p.y);
+    });
+    this.createLevelTiles();
+    this.level.entrance = this.rooms[0].center();
+    this.level.spawn_points = this.rooms
+      .filter((_, i) => i !== 0)
+      .map((r) => r.center());
+  }
+
+  createLevelTiles() {
+    const MIN_SIZE = 3;
+    const MAX_SIZE = 10;
+    const MAX_ROOMS = 40;
+    const level = this.level;
+
+    for (let idx = 0; idx < MAX_ROOMS; idx++) {
+      const w = GetRandomBetween(MIN_SIZE, MAX_SIZE);
+      const h = GetRandomBetween(MIN_SIZE, MAX_SIZE);
+      const x = GetDiceRoll(level.width - w - 1);
+      const y = GetDiceRoll(level.height - h - 1);
+
+      const new_room = new Room(x, y, h, w);
+
+      if (!level.inBounds(x, y)) continue;
+
+      if (this.rooms.some((r) => r.intersects(new_room))) continue;
+
+      if (this.rooms.length != 0) {
+        const last_room = this.rooms[this.rooms.length - 1];
+        this.connectRooms(last_room, new_room);
+      }
+
+      this.addRoom(new_room);
     }
+  }
 
-    createLevelTiles() {
-        const MIN_SIZE = 3;
-        const MAX_SIZE = 10;
-        const MAX_ROOMS = 40;
-        const level = this.level;
-
-        for (let idx = 0; idx < MAX_ROOMS; idx++) {
-            const w = GetRandomBetween(MIN_SIZE, MAX_SIZE);
-            const h = GetRandomBetween(MIN_SIZE, MAX_SIZE);
-            const x = GetDiceRoll(level.width - w - 1);
-            const y = GetDiceRoll(level.height - h - 1);
-
-            const new_room = new Room(x, y, h, w);
-
-
-            if (!level.inBounds(x, y)) continue;
-
-            if (this.rooms.some((r) => r.intersects(new_room))) continue;
-
-            if (this.rooms.length != 0) {
-                const last_room = this.rooms[this.rooms.length - 1];
-                this.connectRooms(last_room, new_room);
-            }
-
-            this.addRoom(new_room);
-        }
+  addRoom(r) {
+    this.rooms.push(r);
+    for (let x = 0; x < r.w; x++) {
+      for (let y = 0; y < r.h; y++) {
+        const i = this.level.getIndexFromXY(r.x + x, r.y + y);
+        this.level.tiles[i].convertToFloor();
+      }
     }
+  }
 
-    addRoom(r) {
-        this.rooms.push(r);
-        for (let x = 0; x < r.w; x++) {
-            for (let y = 0; y < r.h; y++) {
-                const i = this.level.getIndexFromXY(r.x + x, r.y + y);
-                this.level.tiles[i].convertToFloor();
-            }
-        }
+  createHorizontalTunnel(x1, x2, y) {
+    for (let x = Math.min(x1, x2); x < Math.max(x1, x2) + 1; x++) {
+      if (this.level.inBounds(x, y))
+        this.level.tiles[this.level.getIndexFromXY(x, y)].convertToFloor();
     }
+  }
 
-    createHorizontalTunnel(x1, x2, y) {
-        for (let x = Math.min(x1, x2); x < Math.max(x1, x2) + 1; x++) {
-            if (this.level.inBounds(x, y))
-            this.level.tiles[this.level.getIndexFromXY(x, y)].convertToFloor();
-        }
+  createVerticalTunnel(y1, y2, x) {
+    for (let y = Math.min(y1, y2); y < Math.max(y1, y2) + 1; y++) {
+      if (this.level.inBounds(x, y))
+        this.level.tiles[this.level.getIndexFromXY(x, y)].convertToFloor();
     }
-
-    createVerticalTunnel(y1, y2, x) {
-        for (let y = Math.min(y1, y2); y < Math.max(y1, y2) + 1; y++) {
-            if (this.level.inBounds(x, y))
-            this.level.tiles[this.level.getIndexFromXY(x, y)].convertToFloor();
-        }
-    }
+  }
 
   connectRooms(r1, r2) {
     const c1 = r1.center();
@@ -164,7 +163,6 @@ class SimpleLevelBuilder {
       this.createVerticalTunnel(c1.y, c2.y, c1.x);
     }
   }
-
 }
 
 class Level {
@@ -203,7 +201,12 @@ class Level {
 
   inBounds(x, y) {
     const idx = this.getIndexFromXY(x, y);
-    return 0 <= x <= this.width && 0 <= y <= this.height && idx >= 0 && idx < this.tiles.length
+    return (
+      0 <= x <= this.width &&
+      0 <= y <= this.height &&
+      idx >= 0 &&
+      idx < this.tiles.length
+    );
   }
 
   blockTile(p) {
@@ -221,7 +224,6 @@ class Level {
       [0, 1],
     ].map((n) => this.getTile(p.x + n[0], p.y + n[1]));
   }
-
 }
 
 class Component {}
@@ -636,97 +638,99 @@ class SamsaraSystem extends System {
 } // handle death and rebirth
 
 class Camera {
+  constructor({ ecs, ctx, map, player }) {
+    this.ecs = ecs;
+    this.ctx = ctx;
+    this.map = map;
+    this.player = player;
+  }
 
-    constructor({ecs, ctx, map, player}) {
-        this.ecs = ecs;
-        this.ctx = ctx;
-        this.map = map;
-        this.player = player;
-    }
+  SHOW_BOUNDS = true;
+  render_map() {
+    const { ctx, map } = this;
+    const level = map.currentLevel();
+    const { min, max } = this.get_min_max();
 
-    SHOW_BOUNDS = true;
-    render_map() {
-        const {ctx, map} = this;
-        const level = map.currentLevel();
-        const {min, max} = this.get_min_max();
-
-        let y = 0;
-        for (let ty = min.y; ty < max.y; ty++) {
-            let x = 0;
-            for (let tx = min.x; tx < max.x; tx++) {
-                if (level.inBounds(tx, ty)) {
-                    const t = level.getTile(tx,ty);
-                    if (t.seen) ctx.fillText(t.char, x * map.tileSize, y * map.tileSize);
-                } else {
-                    if (this.SHOW_BOUNDS) ctx.fillText('x', x * map.tileSize, y * map.tileSize);
-                }
-                x++
-            }
-            y++
+    let y = 0;
+    for (let ty = min.y; ty < max.y; ty++) {
+      let x = 0;
+      for (let tx = min.x; tx < max.x; tx++) {
+        if (level.inBounds(tx, ty)) {
+          const t = level.getTile(tx, ty);
+          if (t.seen) ctx.fillText(t.char, x * map.tileSize, y * map.tileSize);
+        } else {
+          if (this.SHOW_BOUNDS)
+            ctx.fillText("x", x * map.tileSize, y * map.tileSize);
         }
+        x++;
+      }
+      y++;
     }
+  }
 
-    get_min_max() {
-        const { height, width} = this.get_camera_view();
-        const center = {
-            x: Math.round(width / 2),
-            y: Math.round(height / 2),
-        };
-        const pos = this.ecs.get_components(this.player).get(Position);
-        const min = {
-                x: pos.x - center.x,
-                y: pos.y - center.y,
-            };
-        const max = {
-            x: min.x + width,
-            y: min.y + width,
-        };
-        return { min, max }
-    }
+  get_min_max() {
+    const { height, width } = this.get_camera_view();
+    const center = {
+      x: Math.round(width / 2),
+      y: Math.round(height / 2),
+    };
+    const pos = this.ecs.get_components(this.player).get(Position);
+    const min = {
+      x: pos.x - center.x,
+      y: pos.y - center.y,
+    };
+    const max = {
+      x: min.x + width,
+      y: min.y + width,
+    };
+    return { min, max };
+  }
 
-    get_camera_view() {
-        const width = Math.round(this.ctx.canvas.width / this.map.tileSize);
-        const height = Math.round(this.ctx.canvas.height / this.map.tileSize);
-        return { width, height }
-    }
+  get_camera_view() {
+    const width = Math.round(this.ctx.canvas.width / this.map.tileSize);
+    const height = Math.round(this.ctx.canvas.height / this.map.tileSize);
+    return { width, height };
+  }
 
-    render_player_view() {
-        const {ecs, ctx, map, player} = this
-        const level = map.currentLevel();
-        const pv = ecs.get_components(player).get(Viewshed);
-        ecs.get_all_components(Actor) // for now, Actors are renderable
-        .filter((c) => c.has(Position))
-        .map((c) => ({ a: c.get(Actor), pos: c.get(Position) }))
-        .filter((p) => pv.visible(level.getIndexFromPoint(p.pos)))
-        .forEach((p) => {
-            const { a, pos } = p;
-            const { min } = this.get_min_max();
-            const x = pos.x - min.x
-            const y = pos.y - min.y
-            if(level.inBounds(x,y)) ctx.fillText(a.char, x * map.tileSize, y * map.tileSize);
-        });
-    }
+  render_player_view() {
+    const { ecs, ctx, map, player } = this;
+    const level = map.currentLevel();
+    const pv = ecs.get_components(player).get(Viewshed);
+    ecs
+      .get_all_components(Actor) // for now, Actors are renderable
+      .filter((c) => c.has(Position))
+      .map((c) => ({ a: c.get(Actor), pos: c.get(Position) }))
+      .filter((p) => pv.visible(level.getIndexFromPoint(p.pos)))
+      .forEach((p) => {
+        const { a, pos } = p;
+        const { min } = this.get_min_max();
+        const x = pos.x - min.x;
+        const y = pos.y - min.y;
+        if (level.inBounds(x, y))
+          ctx.fillText(a.char, x * map.tileSize, y * map.tileSize);
+      });
+  }
 
-    render_view() {
-        const { ecs, map, ctx } = this;
-        const canvas = ctx.canvas;
-        const level = map.currentLevel();
+  render_view() {
+    const { ecs, map, ctx } = this;
+    const canvas = ctx.canvas;
+    const level = map.currentLevel();
 
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        this.render_map();
-        this.render_player_view();
-    }
+    this.render_map();
+    this.render_player_view();
+  }
 }
 
 class Game {
   ecs = new ECS();
-  map = new GameMap(80,50,10);
+  map = new GameMap(80, 50, 10);
 
   static log(message) {
-    const p = document.createElement('p')
+    const p = document.createElement("p");
     p.textContent = message;
-    document.querySelector('#log').prepend(p);
+    document.querySelector("#log").prepend(p);
   }
 
   #initCanvas() {
@@ -735,8 +739,8 @@ class Game {
     const map = this.map;
     const level = this.map.currentLevel();
 
-    canvas.width = map.tileSize * level.width / 2;
-    canvas.height = map.tileSize * level.height / 2;
+    canvas.width = (map.tileSize * level.width) / 2;
+    canvas.height = (map.tileSize * level.height) / 2;
     canvas.style.width = canvas.width + "px";
     canvas.style.height = canvas.height + "px";
 
@@ -768,7 +772,7 @@ class Game {
 
   #initMonsters() {
     const level = this.map.currentLevel();
-    level.spawn_points.forEach(p => this.spawn_monster(level, p))
+    level.spawn_points.forEach((p) => this.spawn_monster(level, p));
   }
 
   #initSystems() {
@@ -804,8 +808,6 @@ class Game {
     const player = this.ecs.get_components(this.player).get(ActionQueue);
     player.nextAction = this.keymap[e.code] || new Action(this);
   }
-
-
 
   turn = 0;
   update() {
