@@ -41,11 +41,12 @@
       <a href="https://ack.nerdfight.online/notice/AUXABPqenwz1HejRSK">toot</a>
       for a bit more explaination.
     </p>
+    <script src="https://cdn.jsdelivr.net/npm/mainloop.js@latest/build/mainloop.min.js"></script>
     <script src="src/game.js"></script>
     <script>
       const g = new Game(80, 50);
       document.querySelector("html").onkeydown = (e) => {
-        g.update();
+        g.draw();
         g.handleInput(e);
       };
       setInterval(() => g.update(), 15);
