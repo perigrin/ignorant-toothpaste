@@ -45,11 +45,7 @@
     <script src="src/game.js"></script>
     <script>
       const g = new Game(80, 50);
-      document.querySelector("html").onkeydown = (e) => {
-        g.draw();
-        g.handleInput(e);
-      };
-      setInterval(() => g.update(), 15);
+      MainLoop.setUpdate(d => g.update(d)).setDraw(i => g.draw(i)).start();
     </script>
   </body>
 </html>

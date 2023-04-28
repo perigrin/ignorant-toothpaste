@@ -607,6 +607,9 @@ class MonsterAISystem extends System {
             q.nextAction = move(path[1].x - p.x, path[1].y - p.y);
         }
       }
+      else {
+          q.nextAction = new Action(this);
+      }
     });
   }
 }
@@ -773,6 +776,9 @@ class Game {
   }
 
   #initKeymap() {
+
+    document.querySelector("html").onkeydown = (e) => this.handleInput(e);
+
     const move = (dx, dy) => new MovementAction(this, this.player, dx, dy);
     this.keymap = {
       KeyH: move(-1, 0),
@@ -813,7 +819,8 @@ class Game {
       q.nextAction = q.nextAction.perform();
     }
     this.turn++;
-    this.ecs.update();
-    this.camera.render_view();
+    this.ecs.update()
   }
+
+  draw() { this.camera.render_view() }
 }
