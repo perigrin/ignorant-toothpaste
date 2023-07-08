@@ -10,16 +10,18 @@ export const MDistance = (
 
 export class Tile {
   static WallTile(x, y, c = "#", b = true) {
-    return new Tile("wall", x, y, c, b);
+    return new Tile("wall", x, y, c, b, true);
   }
 
-  constructor(type, x, y, char, blocked) {
+  constructor(type, x, y, char, blocked, obstructed) {
     this.type = type;
     this.x = x;
     this.y = y;
     this.char = char;
     this.blocked = blocked;
     this.seen = false;
+    this.visible = false;
+    this.obstructed = false;
   }
 
   position() {
@@ -34,6 +36,7 @@ export class Tile {
     this.type = "floor";
     this.char = " ";
     this.blocked = false;
+    this.obstructed = false;
   }
 
   distance(that) {

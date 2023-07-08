@@ -2,6 +2,7 @@ import {System} from './ecs.js';
 import {Actor, Player, Monster, ActionQueue, Position, Health, Viewshed} from './components.js';
 import {Action, MovementAction} from './actions.js';
 import {AStar} from './astar.js';
+import { FOV } from './fov.js';
 
 export class VisibilitySystem extends System {
   components_required = [Position, Viewshed];
@@ -12,14 +13,11 @@ export class VisibilitySystem extends System {
     this.player = g.player;
   }
 
-  // TODO replace with a real FOV system
   static fov(p, r, l) {
-
+    const cells = new FOV().calc_visible_cells_from(p,r, ({x,y}) => l.getTile(x,y).obstructed)
     const indexes = [l.getIndexFromPoint(p)];
-    for (let x = p.x - r; x < p.x + r; x++) {
-      for (let y = p.y - r; y < p.y + r; y++) {
-        if (l.inBounds(x, y)) indexes.push(l.getIndexFromXY(x, y));
-      }
+    for (const p of cells) {
+        if (l.inBounds(p.x,p.y)) indexes.push(l.getIndexFromPoint(p))
     }
     return indexes;
   }
@@ -33,6 +31,8 @@ export class VisibilitySystem extends System {
       if (!v.dirty) return; // if no viewshed change, don't update
 
       const level = this.level;
+      level.forEachTile((_, t) => t.visible = false) // reset visibility
+
       v.visible_tiles = VisibilitySystem.fov(
         { x: pos.x, y: pos.y },
         v.range,
@@ -43,8 +43,8 @@ export class VisibilitySystem extends System {
         v.visible_tiles
           .filter((i) => level.tiles[i])
           .forEach((i) => (level.tiles[i].seen = true));
-        v.dirty = false;
       }
+      v.dirty = false;
     });
   }
 }

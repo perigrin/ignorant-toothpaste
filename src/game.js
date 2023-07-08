@@ -191,7 +191,7 @@ export class Game {
 
   draw() { this.camera.render_view() }
 
-  start() { MainLoop.setUpdate(d => this.update(d)).setDraw(i => this.draw(i)).start(); }
+  start() { MainLoop.setUpdate(d => this.update(d)).setDraw(_ => this.draw()).start(); }
   stop() { MainLoop.stop() }
 }
 
