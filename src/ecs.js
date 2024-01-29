@@ -9,6 +9,7 @@ export class System {
   }
 
   update () {}
+
   add (e) {
     this.entities.push(e)
   }
@@ -50,13 +51,12 @@ export class ECS {
   entities = []
 
   add_entity () {
-    const e = Object.keys(this.entities).length
-    this.entities[e] = new ComponentContainer()
     return this.entities.push(new ComponentContainer()) - 1
   }
 
   remove_entity (e) {
     delete this.entities[e]
+    delete this.entities_to_destroy[e]
   }
 
   get_components (e) {
@@ -74,17 +74,17 @@ export class ECS {
   }
 
   find_entity (f) {
-    return Object.keys(this.entities).find((e) => f(this.get_components(e)))
+    return this.entities.findIndex((e) => f(this.get_components(e)))
   }
 
   get_all_components (c) {
-    return Object.values(this.entities).filter((comp) => comp.has(c))
+    return this.entities.filter((comp) => comp.has(c))
   }
 
   add_system (s) {
     s.ecs = this
     this.systems.push(s)
-    Object.keys(this.entities).forEach((e) => this.checkES(e, s))
+    this.entities.forEach((_, e) => this.checkES(e, s))
   }
 
   remove_system (sys) {
@@ -98,7 +98,7 @@ export class ECS {
 
   destroy_entity (e) {
     this.systems.forEach((s) => s.remove(e))
-    this.remove_entity(e)
+    this.entities_to_destroy[e] = this.entities[e]
   }
 
   checkE (e) {

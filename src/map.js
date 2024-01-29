@@ -20,7 +20,7 @@ export class Tile {
     this.blocked = blocked
     this.seen = false
     this.visible = false
-    this.obstructed = false
+    this.obstructed = obstructed
   }
 
   position () {
@@ -33,7 +33,7 @@ export class Tile {
 
   convertToFloor () {
     this.type = 'floor'
-    this.char = ' '
+    this.char = '.'
     this.blocked = false
     this.obstructed = false
   }

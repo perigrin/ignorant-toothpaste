@@ -4,6 +4,7 @@ import { Actor, Player, Monster, ActionQueue, Position, Health, Viewshed } from 
 import { Action, MovementAction } from './actions.js'
 import { VisibilitySystem, MonsterAISystem, SamsaraSystem } from './systems.js'
 
+// TODO convert this to a system that requires the Position component and is added only to the player
 class Camera {
   constructor ({ ecs, ctx, map, player }) {
     this.ecs = ecs
@@ -12,7 +13,7 @@ class Camera {
     this.player = player
   }
 
-  SHOW_BOUNDS = false
+  SHOW_BOUNDS = true
   render_map () {
     const { ctx, map } = this
     const level = map.currentLevel()
@@ -24,6 +25,7 @@ class Camera {
       for (let tx = min.x; tx < max.x; tx++) {
         if (level.inBounds(tx, ty)) {
           const t = level.getTile(tx, ty)
+          if (t.visible) ctx.fillText('y', x * map.tileSize, y * map.tileSize)
           if (t.seen) ctx.fillText(t.char, x * map.tileSize, y * map.tileSize)
         } else {
           if (this.SHOW_BOUNDS) { ctx.fillText('x', x * map.tileSize, y * map.tileSize) }

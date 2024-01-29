@@ -18,7 +18,7 @@ export class FOV {
   RESTRICTIVENESS = 1
   VISIBLE_ON_EQUAL = 1
 
-  calc_visibleCells_from ({ x, y }, r, isTransparent) {
+  calcVisibleCellsFrom ({ x, y }, r, isTransparent) {
     const cells = []
     cells.push(
       ...this.#visibleCells_in_quadrant_from(x, y, 1, 1, r, isTransparent)
@@ -127,7 +127,7 @@ export class FOV {
 
   #add_obstructions (cell, list) {
     const o = new CellAngles(cell.near, cell.center, cell.far)
-    const newList = list.grep(i => !this.#combine_obstruction(i, o))
+    const newList = list.filter(i => !this.#combine_obstruction(i, o))
     newList.push(o)
     return newList
   }
