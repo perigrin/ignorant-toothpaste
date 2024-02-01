@@ -28,9 +28,10 @@ export class MovementAction extends Action {
     const tile = l.getTile(pos.x + dx, pos.y + dy)
     if (tile.blocked) {
       // get monster at that position:
-      const enemy = this.game.ecs.find_entity((e) =>
-        EqualPositions(e.get(Position), tile)
-      )
+      const enemy = this.game.ecs.find_entity((e) => {
+        if (!e) return
+        return EqualPositions(e.get(Position), tile)
+      })
       if (enemy) {
         return new MeleeAttack(this.game, this.entity, enemy)
       }
