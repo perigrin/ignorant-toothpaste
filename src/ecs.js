@@ -36,7 +36,9 @@ export class ComponentContainer {
   }
 
   get (Class) {
-    if (this.containers[Class.constructor.name] !== undefined) { return this.containers[Class] }
+    if (this.containers[Class.constructor.name] !== undefined) {
+      return this.containers[Class]
+    }
     return Object.values(this.containers).find((c) => c instanceof Class)
   }
 

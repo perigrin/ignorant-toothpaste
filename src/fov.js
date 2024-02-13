@@ -61,9 +61,11 @@ export class FOV {
     const visibleCells = []
 
     const hasFullObstruction = function () {
-      return obstructions.length === 1 &&
+      return (
+        obstructions.length === 1 &&
         obstructions[0].near === 0.0 &&
         obstructions[0].far === 1.0
+      )
     }
 
     while (iteration < radius && !hasFullObstruction()) {
@@ -111,7 +113,7 @@ export class FOV {
 
     for (const o of obstructions) {
       if (o.contains(cellAngles.near, this.VISIBLE_ON_EQUAL)) nearVisible = 0
-      if (o.contains(cellAngles.center, this.VISIBLE_ON_EQUAL)) centerVisible = 0
+      if (o.contains(cellAngles.center, this.VISIBLE_ON_EQUAL)) { centerVisible = 0 }
       if (o.contains(cellAngles.far, this.VISIBLE_ON_EQUAL)) farVisible = 0
     }
 
@@ -127,7 +129,7 @@ export class FOV {
 
   #add_obstructions (cell, list) {
     const o = new CellAngles(cell.near, cell.center, cell.far)
-    const newList = list.filter(i => !this.#combine_obstruction(i, o))
+    const newList = list.filter((i) => !this.#combine_obstruction(i, o))
     newList.push(o)
     return newList
   }

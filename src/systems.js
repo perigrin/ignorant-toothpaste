@@ -1,5 +1,13 @@
 import { System } from './ecs.js'
-import { Actor, Player, Monster, ActionQueue, Position, Health, Viewshed } from './components.js'
+import {
+  Actor,
+  Player,
+  Monster,
+  ActionQueue,
+  Position,
+  Health,
+  Viewshed
+} from './components.js'
 import { Action, MovementAction } from './actions.js'
 import { AStar } from './astar.js'
 import { FOV } from './fov.js'
@@ -14,11 +22,14 @@ export class VisibilitySystem extends System {
     this.player = g.player
   }
 
-  static fov (p, r, l) { // point range level
+  static fov (p, r, l) {
+    // point range level
     const cells = fov.calcVisibleCellsFrom(
       p, // point
       r, // range
-      ({ x, y }) => { return l.getTile(x, y)?.obstructed }// isTransparent }
+      ({ x, y }) => {
+        return l.getTile(x, y)?.obstructed
+      } // isTransparent }
     )
     const indexes = [l.getIndexFromPoint(p)]
     for (const p of cells) {
@@ -36,7 +47,9 @@ export class VisibilitySystem extends System {
       if (!v.dirty) return // if no viewshed change, don't update
 
       const level = this.level
-      level.forEachTile((_, t) => { t.visible = false }) // reset visibility
+      level.forEachTile((_, t) => {
+        t.visible = false
+      }) // reset visibility
 
       v.visible_tiles = VisibilitySystem.fov(
         { x: pos.x, y: pos.y },
@@ -108,7 +121,9 @@ export class SamsaraSystem extends System {
           this.game.stop()
           return
         }
-        if (a instanceof Monster) { console.log('I should probably spawn another monster') } // TODO respawn monster
+        if (a instanceof Monster) {
+          console.log('I should probably spawn another monster')
+        } // TODO respawn monster
         const p = cs.get(Position)
         p.unblock() // unblock the position
         ecs.add_entity_to_destroy(e)

@@ -64,7 +64,9 @@ export class Room {
       that.x + that.w < this.x ||
       this.y + this.h < that.y ||
       that.y + that.h < this.y
-    ) { return false }
+    ) {
+      return false
+    }
 
     return true
   }
@@ -137,13 +139,17 @@ export class SimpleLevelBuilder {
 
   createHorizontalTunnel (x1, x2, y) {
     for (let x = Math.min(x1, x2); x < Math.max(x1, x2) + 1; x++) {
-      if (this.level.inBounds(x, y)) { this.level.tiles[this.level.getIndexFromXY(x, y)].convertToFloor() }
+      if (this.level.inBounds(x, y)) {
+        this.level.tiles[this.level.getIndexFromXY(x, y)].convertToFloor()
+      }
     }
   }
 
   createVerticalTunnel (y1, y2, x) {
     for (let y = Math.min(y1, y2); y < Math.max(y1, y2) + 1; y++) {
-      if (this.level.inBounds(x, y)) { this.level.tiles[this.level.getIndexFromXY(x, y)].convertToFloor() }
+      if (this.level.inBounds(x, y)) {
+        this.level.tiles[this.level.getIndexFromXY(x, y)].convertToFloor()
+      }
     }
   }
 

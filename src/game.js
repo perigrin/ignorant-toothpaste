@@ -1,6 +1,14 @@
-import { GameMap } from './map.js'
+import { GameMap } from 'https://cdn.jsdelivr.net/npm/mainloop.js@latest/build/mainloop.min.js'
 import { ECS } from './ecs.js'
-import { Actor, Player, Monster, ActionQueue, Position, Health, Viewshed } from './components.js'
+import {
+  Actor,
+  Player,
+  Monster,
+  ActionQueue,
+  Position,
+  Health,
+  Viewshed
+} from './components.js'
 import { Action, MovementAction } from './actions.js'
 import { VisibilitySystem, MonsterAISystem, SamsaraSystem } from './systems.js'
 
@@ -28,7 +36,9 @@ class Camera {
           if (t.visible) ctx.fillText('y', x * map.tileSize, y * map.tileSize)
           if (t.seen) ctx.fillText(t.char, x * map.tileSize, y * map.tileSize)
         } else {
-          if (this.SHOW_BOUNDS) { ctx.fillText('x', x * map.tileSize, y * map.tileSize) }
+          if (this.SHOW_BOUNDS) {
+            ctx.fillText('x', x * map.tileSize, y * map.tileSize)
+          }
         }
         x++
       }
@@ -74,7 +84,9 @@ class Camera {
         const { min } = this.get_min_max()
         const x = pos.x - min.x
         const y = pos.y - min.y
-        if (level.inBounds(x, y)) { ctx.fillText(a.char, x * map.tileSize, y * map.tileSize) }
+        if (level.inBounds(x, y)) {
+          ctx.fillText(a.char, x * map.tileSize, y * map.tileSize)
+        }
       })
   }
 
@@ -186,11 +198,20 @@ export class Game {
     this.ecs.update()
   }
 
-  draw () { this.camera.render_view() }
+  draw () {
+    this.camera.render_view()
+  }
 
   /* global MainLoop */
-  start () { MainLoop.setUpdate(d => this.update(d)).setDraw(_ => this.draw()).start() }
-  stop () { MainLoop.stop() }
+  start () {
+    MainLoop.setUpdate((d) => this.update(d))
+      .setDraw((_) => this.draw())
+      .start()
+  }
+
+  stop () {
+    MainLoop.stop()
+  }
 }
 
 const g = new Game(80, 50)
