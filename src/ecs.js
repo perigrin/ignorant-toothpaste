@@ -56,11 +56,6 @@ export class ECS {
     return this.entities.push(new ComponentContainer()) - 1
   }
 
-  remove_entity (e) {
-    delete this.entities[e]
-    delete this.entities_to_destroy[e]
-  }
-
   get_components (e) {
     return this.entities[e]
   }
@@ -76,7 +71,9 @@ export class ECS {
   }
 
   find_entity (f) {
-    return this.entities.findIndex((e) => f(this.get_components(e)))
+    const e = this.entities.findIndex(f)
+    if (e < 0) { return }
+    return e
   }
 
   get_all_components (c) {
@@ -95,12 +92,12 @@ export class ECS {
 
   update () {
     this.systems.forEach((s) => s.update())
-    this.entities_to_destroy.forEach((e) => this.destroy_entity(e))
+    this.entities_to_destroy = []
   }
 
   destroy_entity (e) {
     this.systems.forEach((s) => s.remove(e))
-    this.entities_to_destroy[e] = this.entities[e]
+    this.entities_to_destroy[e] = delete this.entities[e]
   }
 
   checkE (e) {

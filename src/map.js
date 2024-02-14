@@ -8,15 +8,16 @@ export const MDistance = (
 ) => Math.abs(here.x - there.x) + Math.abs(here.y - there.y)
 
 export class Tile {
-  static WallTile (x, y, c = '#', b = true) {
-    return new Tile('wall', x, y, c, b, true)
+  static WallTile (x, y, c = '#', s = [5, 12], b = true) {
+    return new Tile('wall', x, y, c, s, b, true)
   }
 
-  constructor (type, x, y, char, blocked, obstructed) {
+  constructor (type, x, y, char, sprite, blocked, obstructed) {
     this.type = type
     this.x = x
     this.y = y
     this.char = char
+    this.sprite = sprite
     this.blocked = blocked
     this.seen = false
     this.visible = false
@@ -34,6 +35,7 @@ export class Tile {
   convertToFloor () {
     this.type = 'floor'
     this.char = '.'
+    this.sprite = [0, 11]
     this.blocked = false
     this.obstructed = false
   }
@@ -74,7 +76,8 @@ export class Room {
 
 export class GameMap {
   levels = []
-  constructor (width, height, tileSize = 10) {
+
+  constructor (width, height, tileSize = 64) {
     this.tileSize = tileSize
     this.levels.push(new SimpleLevelBuilder(width, height).level)
   }
