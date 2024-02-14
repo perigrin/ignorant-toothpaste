@@ -1,105 +1,22 @@
-import { GameMap } from 'https://cdn.jsdelivr.net/npm/mainloop.js@latest/build/mainloop.min.js'
+import { GameMap } from './map.js'
 import { ECS } from './ecs.js'
 import {
-  Actor,
-  Player,
-  Monster,
   ActionQueue,
-  Position,
+  Actor,
+  Camera,
   Health,
+  Monster,
+  Player,
+  Position,
   Viewshed
 } from './components.js'
 import { Action, MovementAction } from './actions.js'
-import { VisibilitySystem, MonsterAISystem, SamsaraSystem } from './systems.js'
-
-// TODO convert this to a system that requires the Position component and is added only to the player
-class Camera {
-  constructor ({ ecs, ctx, map, player }) {
-    this.ecs = ecs
-    this.ctx = ctx
-    this.map = map
-    this.player = player
-  }
-
-  SHOW_BOUNDS = true
-  render_map () {
-    const { ctx, map } = this
-    const level = map.currentLevel()
-    const { min, max } = this.get_min_max()
-
-    let y = 0
-    for (let ty = min.y; ty < max.y; ty++) {
-      let x = 0
-      for (let tx = min.x; tx < max.x; tx++) {
-        if (level.inBounds(tx, ty)) {
-          const t = level.getTile(tx, ty)
-          if (t.visible) ctx.fillText('y', x * map.tileSize, y * map.tileSize)
-          if (t.seen) ctx.fillText(t.char, x * map.tileSize, y * map.tileSize)
-        } else {
-          if (this.SHOW_BOUNDS) {
-            ctx.fillText('x', x * map.tileSize, y * map.tileSize)
-          }
-        }
-        x++
-      }
-      y++
-    }
-  }
-
-  get_min_max () {
-    const { height, width } = this.get_camera_view()
-    const center = {
-      x: Math.round(width / 2),
-      y: Math.round(height / 2)
-    }
-    const pos = this.ecs.get_components(this.player).get(Position)
-    const min = {
-      x: pos.x - center.x,
-      y: pos.y - center.y
-    }
-    const max = {
-      x: min.x + width,
-      y: min.y + width
-    }
-    return { min, max }
-  }
-
-  get_camera_view () {
-    const width = Math.round(this.ctx.canvas.width / this.map.tileSize)
-    const height = Math.round(this.ctx.canvas.height / this.map.tileSize)
-    return { width, height }
-  }
-
-  render_player_view () {
-    const { ecs, ctx, map, player } = this
-    const level = map.currentLevel()
-    const pv = ecs.get_components(player).get(Viewshed)
-    ecs
-      .get_all_components(Actor) // for now, Actors are renderable
-      .filter((c) => c.has(Position))
-      .map((c) => ({ a: c.get(Actor), pos: c.get(Position) }))
-      .filter((p) => pv.visible(level.getIndexFromPoint(p.pos)))
-      .forEach((p) => {
-        const { a, pos } = p
-        const { min } = this.get_min_max()
-        const x = pos.x - min.x
-        const y = pos.y - min.y
-        if (level.inBounds(x, y)) {
-          ctx.fillText(a.char, x * map.tileSize, y * map.tileSize)
-        }
-      })
-  }
-
-  render_view () {
-    const { ctx } = this
-    const canvas = ctx.canvas
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-
-    this.render_map()
-    this.render_player_view()
-  }
-}
+import {
+  CameraSystem,
+  VisibilitySystem,
+  MonsterAISystem,
+  SamsaraSystem
+} from './systems.js'
 
 export class Game {
   ecs = new ECS()
@@ -135,6 +52,7 @@ export class Game {
     const level = this.map.currentLevel()
     const { x, y } = level.entrance // TODO replace with level entrance
     this.player = this.#init_actor(new Player(), new Position(x, y, level))
+    this.ecs.add_component(this.player, new Camera())
   }
 
   spawn_monster (level, p) {
@@ -147,6 +65,7 @@ export class Game {
   }
 
   #initSystems () {
+    this.ecs.add_system(new CameraSystem(this))
     this.ecs.add_system(new VisibilitySystem(this))
     this.ecs.add_system(new MonsterAISystem(this))
     this.ecs.add_system(new SamsaraSystem(this))
@@ -168,7 +87,7 @@ export class Game {
     }
   }
 
-  constructor (w = 80, h = 50, t = 10) {
+  constructor (w = 80, h = 50, t = 64) {
     this.map = new GameMap(w, h, t)
     this.#initCanvas()
     this.#initPlayer()
@@ -198,14 +117,10 @@ export class Game {
     this.ecs.update()
   }
 
-  draw () {
-    this.camera.render_view()
-  }
-
-  /* global MainLoop */
   start () {
+    /* global MainLoop */
     MainLoop.setUpdate((d) => this.update(d))
-      .setDraw((_) => this.draw())
+      .setDraw((_) => this.ecs.update())
       .start()
   }
 

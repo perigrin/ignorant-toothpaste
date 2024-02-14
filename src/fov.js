@@ -14,9 +14,9 @@ class CellAngles {
 
 export class FOV {
   RADIUS_FUDGE = 1 / 3
-  NOT_VISIBLE_BLOCKS_VISION = 1
+  NOT_VISIBLE_BLOCKS_VISION = true
   RESTRICTIVENESS = 1
-  VISIBLE_ON_EQUAL = 1
+  VISIBLE_ON_EQUAL = true
 
   calcVisibleCellsFrom ({ x, y }, r, isTransparent) {
     const cells = []

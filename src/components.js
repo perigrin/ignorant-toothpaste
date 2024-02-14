@@ -26,10 +26,12 @@ export class Actor extends Component {
 // TODO differentiate stats between Players and Monsters
 export class Player extends Actor {
   char = '@'
+  sprite = [0, 0]
 }
 
 export class Monster extends Actor {
   char = 'm'
+  sprite = [1, 1]
 } // TODO different monsters
 
 export class ActionQueue extends Component {
@@ -80,3 +82,5 @@ export class Viewshed extends Component {
     return this.visible_tiles.find((i) => i === idx)
   }
 }
+
+export class Camera extends Component { }
